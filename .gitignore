@@ -1,0 +1,17 @@
+__pycache__/
+*.pyc
+.pytest_cache/
+artifacts/
+results/
+data/raw/*
+!data/raw/.gitkeep
+paper/*.aux
+paper/*.bbl
+paper/*.blg
+paper/*.log
+paper/*.out
+paper/*.fls
+paper/*.fdb_latexmk
+paper/*.synctex.gz
+paper/main.pdf
+*.egg-info/

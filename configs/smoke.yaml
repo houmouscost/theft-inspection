@@ -1,0 +1,24 @@
+# Uji asap: data sintetis kecil, 2 seed, selesai < ~1 menit. BUKAN hasil untuk paper.
+name: smoke
+seeds: [0, 1]
+
+data:
+  source: synthetic
+  synthetic:
+    n_consumers: 3000
+    n_days: 120
+
+detector:
+  max_iter: 80
+
+experiment:
+  budgets: [0.02, 0.05]
+  penalties: [0.0, 1.0]
+  eps_grid: [0.0, 0.25, 1.0]
+  tau_grid: [0.0]
+  r_static: [0.5]
+  br_iters: 5
+
+certificate:
+  trials: 100
+  n_cal: 40

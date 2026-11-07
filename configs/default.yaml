@@ -1,0 +1,62 @@
+# Konfigurasi utama (data SGCC nyata). Override lewat configs/smoke.yaml dsb.
+name: sgcc_main
+seeds: [0, 1, 2, 3, 4]
+
+paths:
+  artifacts: artifacts      # cache data bersih + fitur
+  results: results          # CSV hasil + gambar
+  paper_generated: paper/generated   # tabel/gambar yang di-\input oleh LaTeX
+
+data:
+  source: sgcc              # sgcc | synthetic
+  sgcc_path: data/raw/sgcc/data.csv
+  clip_sigma: 3.0           # winsorisasi mean + k*std per konsumen
+  split: {train: 0.6, calib: 0.2, test: 0.2}
+  synthetic:
+    n_consumers: 4000
+    n_days: 180
+    theft_rate: 0.085
+    missing_rate: 0.02
+    missing_shortcut: false  # true = pencuri punya lebih banyak NaN (meniru shortcut SGCC)
+
+detector:
+  max_iter: 300
+  learning_rate: 0.08
+  max_leaf_nodes: 31
+  l2: 1.0
+
+# Varian detektor. game: true -> ikut permainan Stackelberg (E2/E3)
+variants:
+  - {name: gbm_level,     use_level: true,  use_missing: false, adv_train: false, game: true}
+  - {name: gbm_shape,     use_level: false, use_missing: false, adv_train: false, game: true}
+  - {name: gbm_level_adv, use_level: true,  use_missing: false, adv_train: true,  game: true}
+  - {name: gbm_level_miss,use_level: true,  use_missing: true,  adv_train: false, game: false}
+
+adv_train:
+  ratio: 1.0                # jumlah sampel serangan = ratio * jumlah pencuri asli di train
+  kinds: [A1, A2]           # A3 sengaja DITAHAN (uji generalisasi ke serangan tak terlihat)
+  r_range: [0.1, 0.9]
+
+experiment:
+  inject_rate: 0.085        # porsi konsumen jujur-uji yang dijadikan pencuri adaptif
+  budgets: [0.01, 0.02, 0.05]       # b = fraksi populasi yang diinspeksi
+  penalties: [0.0, 1.0, 3.0]        # phi: denda proporsional thd nilai curian
+  eps_grid: [0.0, 0.1, 0.25, 0.5, 1.0]   # porsi anggaran acak (eps=1 -> acak murni)
+  tau_grid: [0.0, 0.05]             # kelembutan ambang (0 -> top-k keras)
+  adversaries: [A1, A2, A3]
+  r_grid: [0.0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9]
+  r_static: [0.3, 0.6]              # pencuri non-adaptif (konsistensi)
+  br_iters: 8
+  a3_bank_max: 20000
+
+certificate:
+  variant: gbm_level
+  budget: 0.02
+  penalty: 1.0
+  eps: 0.1
+  tau: 0.0
+  alpha: 0.1
+  n_cal: 100
+  trials: 500
+  # [kelas kalibrasi, kelas deployment]; pasangan lintas-kelas menguji pergeseran adversary
+  pairs: [[A2, A2], [A2, A1], [A2, A3], [A1, A1]]
