@@ -1,0 +1,11 @@
+# Diagnostik sampel-hingga untuk E4 (batas mimikri) dan E5 (sertifikat) saja. Melewati E2/E6/E7/E9 yang mahal;
+# aliran acak utama tak tersentuh, sehingga baris E5 identik dengan run utama (kolom lama) dan kolom baru dapat
+# dibandingkan. Hasil dibaca laporan lewat report.finite_sample di default.yaml.
+name: sgcc_diag
+paths:
+  paper_generated: results/sgcc_diag/paper_unused
+experiment:
+  stages: [e4, e5]
+deterrence: null
+bounded: null
+strategic: null

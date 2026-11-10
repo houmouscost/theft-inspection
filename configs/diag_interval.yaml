@@ -1,0 +1,14 @@
+# Aturan interval (3 parameter) pada sel level, skenario S1. Hanya E5+E7: E5 tetap dijalankan agar aliran acak
+# utama (yang dikonsumsi E5 sebelum E7) identik dengan run utama; baris 'milp_level' harus sama persis.
+name: sgcc_int
+paths:
+  paper_generated: results/sgcc_int/paper_unused
+experiment:
+  stages: [e5, e7]
+deterrence: null
+bounded: null
+strategic:
+  modes: [level]
+  oracle_modes: []
+  validate: null
+  interval: true

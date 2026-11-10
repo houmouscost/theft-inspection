@@ -250,3 +250,31 @@ def fit_local(Kth: np.ndarray, G: np.ndarray, Kh: np.ndarray, K: int, b: float, 
         f, p, locked = best
     return np.clip(p, 0, 1), {"status": 0, "solve_s": time.time() - t0, "iters": it + 1, "start": start,
                               "train_obj": f, "train_obj_uniform": f_start, "n_locked": int(locked.sum())}
+
+
+def fit_interval(Kth: np.ndarray, G: np.ndarray, Kh: np.ndarray, K: int, b: float, phi: float, vals=None):
+    """Aturan interval pada sel LEVEL terurut (K sel, 0 = level terendah): inspeksi sel [i..j] dengan probabilitas
+    p_in, semua sel lain dengan probabilitas seragam u yang menghabiskan sisa anggaran (bisection).
+
+    Tiga parameter (i, j, p_in) -- bentuk batas-audit Reinganum-Wilde yang dipotong di bawah. Pencarian penuh
+    atas semua interval (K(K+1)/2) dan p_in dari himpunan kandidat; titik awal = acak seragam (p = b), sehingga
+    hasilnya tidak pernah lebih buruk daripada acak pada pencuri latih. Return (p[K], info)."""
+    t0 = time.time()
+    c = 1.0 + phi
+    nh = np.bincount(Kh, minlength=K).astype(float)
+    B = b * (len(Kh) + len(G))
+    det_level = min(1.0, (1.0 / c) * (1 + 1e-3))
+    if vals is None:
+        vals = sorted({v for v in (b, 2 * b, 4 * b, 8 * b, 0.5 * det_level, det_level, 1.0) if 0 < v <= 1.0})
+    p0, f0 = _rebalance(np.full(K, b), np.zeros(K, dtype=bool), Kth, G, nh, c, B)
+    best_p, best_f, best_ij = p0, f0, (-1, -1, float(b))
+    for i in range(K):
+        for j in range(i, K):
+            lk = np.zeros(K, dtype=bool); lk[i:j + 1] = True
+            for v in vals:
+                q = np.zeros(K); q[i:j + 1] = v
+                q, fq = _rebalance(q, lk, Kth, G, nh, c, B)
+                if q is not None and fq < best_f - 1e-9 * max(abs(best_f), 1.0):
+                    best_p, best_f, best_ij = q, fq, (i, j, float(v))
+    return np.clip(best_p, 0, 1), {"status": 0, "solve_s": time.time() - t0, "iv_lo": best_ij[0], "iv_hi": best_ij[1],
+                                   "iv_p": best_ij[2], "train_obj": best_f, "train_obj_uniform": f0}

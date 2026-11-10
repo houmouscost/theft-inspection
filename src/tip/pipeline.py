@@ -122,6 +122,10 @@ def _parse_pool(spec: str):
 def run_seed(cfg: dict, seed: int, X, y, miss, F) -> dict[str, list]:
     ex = cfg["experiment"]
     rng = np.random.default_rng(seed)
+    stages = ex.get("stages")      # None = semua; mis. [e4, e5] = hanya diagnostik murah (aliran acak utama tak berubah)
+
+    def on(k: str) -> bool:
+        return stages is None or k in stages
     tr, cal, te = split_indices(y, cfg["data"]["split"], seed)
     rows = {"e0": [], "e1": [], "e2": [], "e4": [], "e5": [], "e6": [], "e7": [], "e7p": [], "e7v": [], "e9": []}
 
@@ -146,7 +150,7 @@ def run_seed(cfg: dict, seed: int, X, y, miss, F) -> dict[str, list]:
 
     # ---- E1: kinerja pada label nyata (skenario S0, tanpa adaptasi)
     yt = y[te]
-    for name, det in (dets.items() if len(np.unique(yt)) == 2 else []):   # E1 butuh label nyata
+    for name, det in (dets.items() if len(np.unique(yt)) == 2 and on("e1") else []):   # E1 butuh label nyata
         s = det.score_rows(F[te], X[te])
         hon_te = yt == 0
         # korelasi peringkat skor vs log-level pada konsumen jujur: >0 berarti "level tinggi = curiga"
@@ -198,6 +202,14 @@ def run_seed(cfg: dict, seed: int, X, y, miss, F) -> dict[str, list]:
 
     game_vars = [v["name"] for v in cfg["variants"] if v.get("game", True)]
     sol_cache = {}
+    # populasi untuk batas mimikri berbasis KDE: g = level semua konsumen jujur; h = level populasi asal pencuri
+    # (S1: semua jujur yang memenuhi syarat; sampling lain: pencuri terealisasi)
+    load_all = X.mean(1)
+    elig_all = (y == 0) & ((load_all > 0) if ex.get("exclude_zero_load", True) else True)
+    lg_pop = F[y == 0, LOGM]
+    lh_pop = F[elig_all, LOGM] if ex.get("thief_sampling", "uniform") == "uniform" else F[th_idx, LOGM]
+    tv_kde_cache: dict = {}
+    rr4 = np.random.default_rng(seed + 707)      # aliran acak terpisah untuk E4
     for name in game_vars:
         det = dets[name]
         hs = det.score_rows(F[hon_idx], X[hon_idx])
@@ -206,7 +218,7 @@ def run_seed(cfg: dict, seed: int, X, y, miss, F) -> dict[str, list]:
             G = grid_G[kind]
             base = {"seed": seed, "variant": name, "adversary": kind}
             # E2 adaptif
-            for b in ex["budgets"]:
+            for b in (ex["budgets"] if on("e2") else []):
                 for phi in ex["penalties"]:
                     for eps in ex["eps_grid"]:
                         for tau in ex["tau_grid"]:
@@ -228,20 +240,28 @@ def run_seed(cfg: dict, seed: int, X, y, miss, F) -> dict[str, list]:
                             rows["e2"].append({**base, "mode": "static", "r_static": rs,
                                                "budget": b, "penalty": np.nan, "eps": eps,
                                                "tau": tau, "mean_r": rs, **m})
-            # E4: batas mimikri vs KS empiris
-            if name in ex.get("e4_variants", ["gbm_level", "gbm_shape"]) or len(game_vars) == 1:
+            # E4: batas mimikri vs KS empiris (+ estimasi sampel-hingga: TV-KDE, akurasi seimbang cross-fit, null permutasi)
+            if on("e4") and (name in ex.get("e4_variants", ["gbm_level", "gbm_shape"]) or len(game_vars) == 1):
                 lg, lh = F[hon_idx, LOGM], F[th_idx, LOGM]
                 for j, r in enumerate(r_grid):
                     if r <= 0:
                         continue
+                    if r not in tv_kde_cache:
+                        tv_kde_cache[r] = tuple(theory.mimicry_tv_kde(lg_pop, lh_pop, r, m) for m in (1.0, 0.5, 2.0))
                     ks = theory.ks_stat(hs, S[:, j])
+                    ba_cf, ba_se = theory.ba_crossfit(hs, S[:, j], rr4)
                     rows["e4"].append({"seed": seed, "variant": name, "adversary": kind, "r": r,
                                        "tv_bound": theory.mimicry_tv(lg, lh, r),
-                                       "ks_emp": ks, "balacc_emp": 0.5 * (1 + ks)})
+                                       "tv_kde": tv_kde_cache[r][0], "tv_kde_lo": tv_kde_cache[r][1],
+                                       "tv_kde_hi": tv_kde_cache[r][2],
+                                       "ks_emp": ks, "balacc_emp": 0.5 * (1 + ks),
+                                       "ba_cf": ba_cf, "ba_cf_se": ba_se,
+                                       "ks_null": theory.ks_perm_null(hs, S[:, j], rr4),
+                                       "n_h": len(hs), "n_t": len(S)})
 
     # ---- E5: sertifikat miss-rate (kalibrasi vs deployment; pool 'A2@0.6' = pencuri statis)
     c = cfg.get("certificate") or {}
-    cert_vars = c.get("variants", [c["variant"]] if "variant" in c else [])
+    cert_vars = c.get("variants", [c["variant"]] if "variant" in c else []) if on("e5") else []
     n_cals = c.get("n_cal", 100)
     n_cals = n_cals if isinstance(n_cals, list) else [n_cals]
     ar = np.arange(len(th_idx))
@@ -271,13 +291,15 @@ def run_seed(cfg: dict, seed: int, X, y, miss, F) -> dict[str, list]:
                     pc, pdp = pm[: len(pm) // 2], pm[len(pm) // 2:]
                 if len(pc) < 10 or len(pdp) < 10:
                     continue
-                res = conformal.coverage(pc, pdp, c["alpha"], n_cal, c["trials"], rng)
+                sd = conformal.shift_diagnostics(pc, pdp)
+                res = conformal.coverage(pc, pdp, c["alpha"], n_cal, c["trials"], rng, tv_adj=sd["ks_pools"])
                 rows["e5"].append({"seed": seed, "variant": vname, "cal": cal_k, "dep": dep_k,
-                                   "n_cal_req": n_cal, "mean_miss_cal": float(np.mean(pc)), **res})
+                                   "n_cal_req": n_cal, "mean_miss_cal": float(np.mean(pc)), **res, **sd,
+                                   "cov_conformal_lb": max(0.0, 1 - c["alpha"] - sd["ks_pools"])})
 
     # ---- E6: sapuan deterensi (Prop. 3) ke anggaran besar
     d = cfg.get("deterrence") or {}
-    if d.get("variant") in dets:
+    if d.get("variant") in dets and on("e6"):
         det = dets[d["variant"]]
         hs = det.score_rows(F[hon_idx], X[hon_idx])
         for kind in d["adversaries"]:
@@ -296,7 +318,7 @@ def run_seed(cfg: dict, seed: int, X, y, miss, F) -> dict[str, list]:
 
     # ---- E7: kebijakan sadar-strategi (Bayesian Stackelberg MILP), ekstensi 1
     sp = cfg.get("strategic") or {}
-    if sp.get("variants") and r_grid[0] == 0:
+    if sp.get("variants") and r_grid[0] == 0 and on("e7"):
         from . import stackelberg as sb
         kinds7 = sp.get("adversaries", ex["adversaries"])
 
@@ -377,6 +399,13 @@ def run_seed(cfg: dict, seed: int, X, y, miss, F) -> dict[str, list]:
                                                         "s_bin": k // (len(cells.edges_l) + 1) if mode == "joint" else (k if mode == "score" else -1),
                                                         "s_q_lo": float(s_lv[cells.score_bin(k)]) if cells.score_bin(k) >= 0 and cells.score_bin(k) < len(s_lv) else np.nan,
                                                         "l_bin": k % (len(cells.edges_l) + 1) if mode == "joint" else (k if mode == "level" else -1)})
+                        if mode == "level" and sp.get("interval", False):
+                            # aturan interval 3-parameter pada sel level (keluarga lebih sederhana, dapat diterapkan utilitas)
+                            pv, info = sb.fit_interval(cells.of(S_c, L_c), uG_c, cells.of(hs_c, hl_c), cells.K, b, phi)
+                            m = sb.evaluate(pv, Kt, uG_t, Kht, b, phi, total_load)
+                            idx = m.pop("idx")
+                            rows["e7"].append({**base, "budget": b, "penalty": phi, "policy": "interval_level",
+                                               "mean_r": float(r_of[idx].mean()), "converged": True, **m, **info})
 
         # validasi solver: pada subsampel kecil pencuri kalibrasi, bandingkan pencarian lokal dengan MILP eksak
         vd = sp.get("validate") or {}
@@ -413,7 +442,7 @@ def run_seed(cfg: dict, seed: int, X, y, miss, F) -> dict[str, list]:
 
     # ---- E9: pencuri berasionalitas terbatas (quantal response) & serangan transfer, ekstensi 3
     bd = cfg.get("bounded") or {}
-    if bd.get("variant") in dets:
+    if bd.get("variant") in dets and on("e9"):
         det = dets[bd["variant"]]
         hs = det.score_rows(F[hon_idx], X[hon_idx])
         sur = None

@@ -12,9 +12,10 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 
-POL_ORDER = ["topk", "random", "milp_score", "milp_level", "milp_joint", "oracle_joint"]
+POL_ORDER = ["topk", "random", "milp_score", "milp_level", "interval_level", "milp_joint", "oracle_joint"]
 POL_LAB = {"topk": "Top-$k$ ($\\varepsilon{=}0$)", "random": "Random ($\\varepsilon{=}1$)",
            "milp_score": "Strategic: score cells", "milp_level": "Strategic: level cells (no ML)",
+           "interval_level": "Strategic: interval rule (3 par.)",
            "milp_joint": "Strategic: score$\\times$level", "oracle_joint": "Oracle: score$\\times$level"}
 KK = {"A1": "One", "A2": "Two", "A3": "Three"}
 
@@ -47,6 +48,10 @@ def stage_report_ext(cfg: dict, dirs: dict, M, save_tab, save_fig, LAB):
         scen.append(("UCI", Path(rep["uci"])))
     e7 = {k: _read(p / "e7_strategic.csv") for k, p in scen}
     e7 = {k: v for k, v in e7.items() if len(v)}
+    for sc_, dpath in (rep.get("interval_runs") or {}).items():   # aturan interval (configs/diag_interval*.yaml)
+        di = _read(Path(dpath) / "e7_strategic.csv")
+        if sc_ in e7 and len(di):
+            e7[sc_] = pd.concat([e7[sc_], di[di.policy == "interval_level"]], ignore_index=True)
     main_var = {"S1": "gbm_level", "S2": "gbm_level", "S3": rep.get("onset_variant", "gbm_change_adv"),
                 "UCI": rep.get("uci_variant", "gbm_change_syn")}
     if "S1" in e7:
@@ -93,7 +98,8 @@ def stage_report_ext(cfg: dict, dirs: dict, M, save_tab, save_fig, LAB):
             for b, bn in ((0.02, "Two"), (0.05, "Five")):
                 for p, pn in ((1.0, "One"), (3.0, "Three")):
                     for pol, pl in (("topk", "Topk"), ("random", "Rand"), ("milp_joint", "Joint"),
-                                    ("milp_level", "Level"), ("milp_score", "Score"), ("oracle_joint", "Oracle")):
+                                    ("milp_level", "Level"), ("milp_score", "Score"), ("oracle_joint", "Oracle"),
+                                    ("interval_level", "Interval")):
                         if (b, p, pol) in gi.index:
                             M.add(f"rSe{nm}B{bn}P{pn}{pl}", f"{100 * gi.loc[(b, p, pol), 'und']:.2f}")
                             M.add(f"rSeSt{nm}B{bn}P{pn}{pl}", f"{100 * gi.loc[(b, p, pol), 'st']:.2f}")
@@ -109,6 +115,34 @@ def stage_report_ext(cfg: dict, dirs: dict, M, save_tab, save_fig, LAB):
                 best = w[[c for c in ("milp_joint", "milp_level", "milp_score") if c in w]].min(1)
                 M.add(f"rSeBestGainMax{nm}", f"{100 * (base - best).max():.2f}")
                 M.add(f"rSeBestRelMax{nm}", f"{100 * ((base - best) / base).max():.1f}")
+        # aturan interval vs kebijakan sel-level penuh
+        for sc, d in e7.items():
+            if "interval_level" not in set(d.policy):
+                continue
+            d = d[d.variant == main_var[sc]]
+            w = d.pivot_table(index=["budget", "penalty"], columns="policy", values="ntl_undetected")
+            base = w[["topk", "random"]].min(1)
+            gl, gi_ = base - w["milp_level"], base - w["interval_level"]
+            nm = {"S1": "SOne", "S2": "STwo"}.get(sc)
+            if nm is None:
+                continue
+            ok = gl > 0.001                                   # hanya setting di mana kebijakan level memang menolong
+            if ok.any():
+                sh = (gi_ / gl)[ok]
+                M.add(f"rIvShareMin{nm}", f"{100 * sh.min():.0f}")
+                M.add(f"rIvShareMax{nm}", f"{100 * sh.max():.0f}")
+                M.add(f"rIvShareN{nm}", str(int(ok.sum())))
+            M.add(f"rIvGainMax{nm}", f"{100 * gi_.max():.2f}")
+            M.add(f"rIvWorseThanBase{nm}", str(int((gi_ < -0.0005).sum())))
+            iv = d[d.policy == "interval_level"].groupby(["budget", "penalty"])[["iv_lo", "iv_hi", "iv_p"]].mean()
+            if (0.02, 3.0) in iv.index:
+                r_ = iv.loc[(0.02, 3.0)]
+                n_l = 12
+                M.add(f"rIvPctLo{nm}", f"{100 * r_.iv_lo / n_l:.0f}")
+                M.add(f"rIvPctHi{nm}", f"{100 * (r_.iv_hi + 1) / n_l:.0f}")
+                M.add(f"rIvP{nm}", f"{r_.iv_p:.2f}")
+            M.add(f"rIvPMin{nm}", f"{iv.iv_p.min():.2f}")
+            M.add(f"rIvPMax{nm}", f"{iv.iv_p.max():.2f}")
         # solver check (E7v)
         v = _read(R / "e7_solver_check.csv")
         if len(v):

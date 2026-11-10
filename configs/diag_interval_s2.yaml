@@ -1,0 +1,18 @@
+# Aturan interval pada skenario S2 (level-matched); tanpa E5 (sama dengan run S2 utama).
+name: sgcc_int_s2
+paths:
+  paper_generated: results/sgcc_int_s2/paper_unused
+experiment:
+  thief_sampling: level_matched
+  budgets: [0.02]
+  penalties: [1.0]
+  tau_grid: [0.0]
+  stages: [e7]
+certificate: null
+deterrence: null
+bounded: null
+strategic:
+  modes: [level]
+  oracle_modes: []
+  validate: null
+  interval: true

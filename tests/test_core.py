@@ -203,3 +203,54 @@ def test_diagnostics_selection_and_hygiene(tmp_path):
     assert h["n_raw_rows"] == 4 and h["n_allmissing_rows"] == 1 and h["n_allmissing_thieves"] == 1
     assert h["n_allzero"] == 2 and h["n_rows_in_dup_groups"] == 2 and h["n_dup_groups_conflict"] == 1
     assert h["n_dup_groups_positive"] == 0 and bool(h["file_sorted_thieves_first"]) is False
+
+
+def test_interval_rule_budget_and_not_worse_than_uniform():
+    """Aturan interval: anggaran terpenuhi, tak lebih buruk daripada acak seragam pada pencuri latih, dan menemukan
+    pita yang benar bila pencuri dalam yang melapor di pita 1 (level rendah tapi bukan terendah)."""
+    from tip import stackelberg as sb
+    rng = np.random.default_rng(0)
+    K, nt, J = 8, 120, 6
+    Kh = rng.integers(0, K, 2000)                                  # honest merata di 8 pita level
+    G = np.zeros((nt, J)); G[:, 1:] = np.linspace(0.2, 1.0, J - 1)[None, :] * rng.uniform(1, 2, (nt, 1))
+    Kth = np.tile(np.array([3, 3, 2, 2, 1, 0]), (nt, 1))              # pelaporan dalam -> pita lebih rendah (kolom 0 = jujur)
+    Kth[:, 0] = 5
+    b, phi = 0.05, 3.0
+    p, info = sb.fit_interval(Kth, G, Kh, K, b, phi)
+    nh = np.bincount(Kh, minlength=K).astype(float)
+    c = 1 + phi
+    f, used = sb._objective(p, Kth, G, nh, c)
+    f_uni, _ = sb._objective(np.full(K, b), Kth, G, nh, c)
+    assert used <= b * (len(Kh) + nt) * (1 + 1e-6)
+    assert f <= f_uni + 1e-9 and info["iv_p"] > 0
+
+
+def test_finite_sample_mimicry_estimators():
+    """TV-KDE tak bias (histogram bias ke atas), BA cross-fit tak bias di bawah nol, null permutasi ~ lantai optimisme."""
+    from scipy.stats import norm
+    from tip import theory
+    rng = np.random.default_rng(3)
+    g = rng.normal(size=100000)
+    r = 0.3
+    exact = 2 * norm.cdf(abs(np.log(1 - r)) / 2) - 1
+    assert abs(theory.mimicry_tv_kde(g, rng.normal(size=50000), r) - exact) < 0.01
+    kde0 = theory.mimicry_tv_kde(g, rng.normal(size=50000), 0.0)
+    hist0 = theory.mimicry_tv(g[:7000], rng.normal(size=659), 0.0)
+    assert kde0 < 0.02 < hist0                                   # kebenaran = 0: histogram bias ~0.1, KDE ~0
+    hs, ts = rng.normal(size=7000), rng.normal(size=659)
+    est, se = theory.ba_crossfit(hs, ts, rng)
+    assert abs(est - 0.5) < 4 * se + 0.01 and se < 0.03
+    assert 0.02 < theory.ks_perm_null(hs, ts, rng) < 0.06       # lantai KS pada sampel hingga (~0.87 / sqrt(n_eff))
+    est2, _ = theory.ba_crossfit(hs, rng.normal(0.5, 1, size=659), rng)
+    assert est2 > 0.55                                           # sinyal nyata (BA sejati 0.599) terdeteksi
+
+
+def test_shift_diagnostics_kolmogorov_bounds_mean_shift_and_coverage_loss():
+    from tip import conformal
+    rng = np.random.default_rng(4)
+    pc, pdp = rng.beta(2, 5, size=300), rng.beta(5, 2, size=300)
+    sd = conformal.shift_diagnostics(pc, pdp)
+    assert abs(pdp.mean() - pc.mean()) <= sd["ks_pools"] + 1e-12 <= 1.0 + 1e-12
+    res = conformal.coverage(pc, pdp, 0.1, 100, 200, rng, tv_adj=sd["ks_pools"])
+    assert res["cov_hoeffding_adj"] >= res["cov_hoeffding"]       # penggeseran batas hanya menambah cakupan
+    assert res["cov_conformal"] >= 0.9 - sd["ks_pools"] - 0.05    # celah cakupan konformal <= KS (+ galat Monte Carlo)

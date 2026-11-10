@@ -100,6 +100,8 @@ bounded:
 
 report:
   # Hasil run sensitivitas yang ikut dilaporkan (dilewati bila belum ada)
+  finite_sample: results/sgcc_diag      # E4/E5 dengan estimator sampel-hingga (configs/diag_e4e5.yaml)
+  interval_runs: {S1: results/sgcc_int, S2: results/sgcc_int_s2}   # aturan interval (configs/diag_interval*.yaml)
   br_sensitivity: results/sgcc_br24
   level_matched: results/sgcc_s2
   depth_caps: {0.5: results/sgcc_rmax05, 0.7: results/sgcc_rmax07}

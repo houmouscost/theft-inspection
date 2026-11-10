@@ -104,6 +104,11 @@ def stage_report(cfg: dict, dirs: dict):
     e0, e1, e2 = _read(R / "e0_data.csv"), _read(R / "e1_detector.csv"), _read(R / "e2_game.csv")
     e4, e5, e6 = _read(R / "e4_mimicry.csv"), _read(R / "e5_certificate.csv"), _read(R / "e6_deterrence.csv")
     rep = cfg.get("report") or {}
+    fs_dir = Path(rep["finite_sample"]) if rep.get("finite_sample") else None
+    if fs_dir is not None and len(_read(fs_dir / "e4_mimicry.csv")):   # estimator sampel-hingga (configs/diag_e4e5.yaml)
+        e4, e5 = _read(fs_dir / "e4_mimicry.csv"), _read(fs_dir / "e5_certificate.csv")
+    if len(e4) and "ba_cf" not in e4.columns:     # CSV lama tanpa estimator sampel-hingga
+        e4 = e4.assign(tv_kde=e4.tv_bound, tv_kde_lo=e4.tv_bound, tv_kde_hi=e4.tv_bound, ba_cf=e4.balacc_emp, ba_cf_se=0.0, ks_null=0.0)
     sens_dir = Path(rep["br_sensitivity"]) if rep.get("br_sensitivity") else None
     s2_dir = Path(rep["level_matched"]) if rep.get("level_matched") else None
     e2_sens = _read(sens_dir / "e2_game.csv") if sens_dir else pd.DataFrame()
@@ -338,21 +343,26 @@ def stage_report(cfg: dict, dirs: dict):
     if len(e5):
         ncs = sorted(e5.n_cal_req.unique())
         n_show = max(ncs)
-        g = e5[e5.n_cal_req == n_show].groupby(["variant", "cal", "dep"], sort=False).agg(
-            mc=("mean_miss_cal", "mean"), uh=("ub_hoeffding", "mean"), uc=("ub_conformal", "mean"),
-            md=("mean_miss_dep", "mean"), ch=("cov_hoeffding", "mean"), cc=("cov_conformal", "mean"),
-            n=("n_cal", "mean")).reset_index()
-        lines = [r"\begin{tabular}{lllcccccc}", r"\toprule",
+        has_tv = "tv_pools_bin" in e5.columns
+        agg = dict(mc=("mean_miss_cal", "mean"), uh=("ub_hoeffding", "mean"), uc=("ub_conformal", "mean"),
+                   md=("mean_miss_dep", "mean"), ch=("cov_hoeffding", "mean"), cc=("cov_conformal", "mean"),
+                   n=("n_cal", "mean"))
+        if has_tv:
+            agg.update(ks=("ks_pools", "mean"), ua=("ub_hoeffding_adj", "mean"),
+                       ca=("cov_hoeffding_adj", "mean"), clb=("cov_conformal_lb", "mean"))
+        g = e5[e5.n_cal_req == n_show].groupby(["variant", "cal", "dep"], sort=False).agg(**agg).reset_index()
+        lines = [r"\begin{tabular}{lllcccccc" + ("ccc" if has_tv else "") + "}", r"\toprule",
                  r"Detector & Calibration & Deployment & $\bar m_{\mathrm{cal}}$ & Hoeff.\ UB & $\hat q$ & "
-                 r"$\bar m_{\mathrm{dep}}$ & Cov.\ (H) & Cov.\ (C) \\", r"\midrule"]
+                 r"$\bar m_{\mathrm{dep}}$ & Cov.\ (H) & Cov.\ (C)" + (r" & $\mathrm{KS}$ & UB$+$KS & Cov.\ (H, adj.)" if has_tv else "") + r" \\", r"\midrule"]
         prev = None
         for _, r in g.iterrows():
             if prev is not None and r.variant != prev:
                 lines.append(r"\midrule")
             vlab = LAB.get(r.variant, _tex(r.variant)) if r.variant != prev else ""
             prev = r.variant
+            extra = f" & {r.ks:.2f} & {r.ua:.3f} & {r.ca:.2f}" if has_tv else ""
             lines.append(f"{vlab} & {_pool_lab(r.cal)} & {_pool_lab(r.dep)} & {r.mc:.3f} & {r.uh:.3f} & "
-                         f"{r.uc:.3f} & {r.md:.3f} & {r.ch:.2f} & {r.cc:.2f} \\\\")
+                         f"{r.uc:.3f} & {r.md:.3f} & {r.ch:.2f} & {r.cc:.2f}{extra} \\\\")
         lines += [r"\bottomrule", r"\end{tabular}"]
         _save_tab("\n".join(lines), "tab_cert.tex", dirs)
         c = cfg["certificate"]
@@ -383,6 +393,25 @@ def stage_report(cfg: dict, dirs: dict):
         # cakupan minimum pada pasangan statis->adaptif, semua detektor & n_cal
         sh = e5[e5.cal.str.contains("@") & ~e5.dep.str.contains("@")]
         M.safe("rCertShiftCovMax", lambda: f"{sh.groupby(['variant', 'cal', 'dep', 'n_cal_req']).cov_hoeffding.mean().max():.2f}")
+        if has_tv:
+            shd = e5[e5.cal.str.contains("@") & ~e5.dep.str.contains("@") & (e5.n_cal_req == n_show)]
+            gm = shd.groupby(["variant", "cal", "dep"]).mean(numeric_only=True)
+            for v, nm in name_map.items():
+                if v in set(shd.variant):
+                    M.safe(f"rCert{nm}ShiftKs", lambda v=v: f"{gm.loc[(v, 'A2@0.6', 'A2'), 'ks_pools']:.2f}")
+                    M.safe(f"rCert{nm}ShiftUBAdj", lambda v=v: f"{gm.loc[(v, 'A2@0.6', 'A2'), 'ub_hoeffding_adj']:.3f}")
+                    M.safe(f"rCert{nm}ShiftCovAdj", lambda v=v: f"{gm.loc[(v, 'A2@0.6', 'A2'), 'cov_hoeffding_adj']:.2f}")
+            alls = e5[e5.cal != e5.dep]
+            M.safe("rCertShiftKsMin", lambda: f"{alls.groupby(['variant', 'cal', 'dep', 'n_cal_req']).ks_pools.mean().min():.2f}")
+            M.safe("rCertShiftKsMax", lambda: f"{alls.groupby(['variant', 'cal', 'dep', 'n_cal_req']).ks_pools.mean().max():.2f}")
+            M.safe("rCertShiftAdjCovMin", lambda: f"{alls.groupby(['variant', 'cal', 'dep', 'n_cal_req']).cov_hoeffding_adj.mean().min():.2f}")
+            # celah rata-rata miss <= KS pada setiap baris (dasar penyesuaian Hoeffding); cakupan konformal >= 1-alpha-KS
+            gap_ok = ((e5.mean_miss_dep - e5.mean_miss_cal) <= e5.ks_pools + 1e-9)
+            M.add("rCertGapOk", str(int(gap_ok.sum())))
+            M.add("rCertGapN", str(int(len(e5))))
+            conf_ok = (e5.cov_conformal >= e5.cov_conformal_lb - 1e-9)
+            M.add("rCertConfLbOk", str(int(conf_ok.sum())))
+            M.add("rCertConfLbN", str(int(len(e5))))
         same = e5[e5.cal == e5.dep]
         M.safe("rCertSameCovMin", lambda: f"{same.groupby(['variant', 'cal', 'n_cal_req']).cov_hoeffding.mean().min():.2f}")
         M.safe("rCertSameCovCMin", lambda: f"{same.groupby(['variant', 'cal', 'n_cal_req']).cov_conformal.mean().min():.2f}")
@@ -458,36 +487,51 @@ def stage_report(cfg: dict, dirs: dict):
     fig.tight_layout()
     _save_fig(fig, "fig_tradeoff.pdf", dirs)
 
-    # ---------------- F3: batas mimikri
+    # ---------------- F3: batas mimikri (TV-KDE; akurasi seimbang cross-fit; lantai nol-permutasi)
     fig, ax = plt.subplots(figsize=(3.4, 2.6))
     d3 = e4[(e4.variant == main_v)]
-    tv = d3.groupby("r")["tv_bound"].mean()
+    tv = d3.groupby("r")["tv_kde"].mean()
     ax.plot(tv.index, 0.5 * (1 + tv.values), "k--", label=r"bound $(1+\mathrm{TV})/2$")
     for k in kinds:
-        s = d3[d3.adversary == k].groupby("r")["balacc_emp"].mean()
-        ax.plot(s.index, s.values, "-o", ms=3, color=COL[k], label=f"{LAB_PLAIN[main_v]}, {k}")
+        sk = d3[d3.adversary == k].groupby("r")["ba_cf"].mean()
+        ax.plot(sk.index, sk.values, "-o", ms=3, color=COL[k], label=f"{LAB_PLAIN[main_v]}, {k}")
     if "gbm_shape" in set(e4.variant):
-        s = e4[(e4.variant == "gbm_shape") & (e4.adversary == "A1")].groupby("r")["balacc_emp"].mean()
-        ax.plot(s.index, s.values, ":", color="#777", label="GBM (shape only), A1")
-    ax.axhline(0.5, color="#ccc", lw=0.8)
+        sk = e4[(e4.variant == "gbm_shape") & (e4.adversary == "A1")].groupby("r")["ba_cf"].mean()
+        ax.plot(sk.index, sk.values, ":", color="#777", label="GBM (shape only), A1")
+    null_ba = float((0.5 * (1 + e4.ks_null)).mean()) if float(e4.ks_null.max()) > 0 else 0.5
+    ax.axhline(null_ba, color="#bbb", lw=0.8)
     ax.set_xlabel("under-reporting depth $r$")
     ax.set_ylabel("balanced accuracy")
     ax.legend(fontsize=6.0)
     fig.tight_layout()
     _save_fig(fig, "fig_mimicry.pdf", dirs)
-    # makro E4: pelanggaran batas (A1/A3; A2 mengubah shape sehingga asumsi Prop. 1 tidak berlaku)
+    # makro E4: uji per-seed (seed x varian x jenis x r). A2 mengubah shape sehingga asumsi Prop. 1 tidak berlaku.
+    e4["bd"] = 0.5 * (1 + e4.tv_kde)
+    e4["bd_hist"] = 0.5 * (1 + e4.tv_bound)
+    e4["v_cf"] = (e4.ba_cf - 1.645 * e4.ba_cf_se) > e4.bd + 1e-12      # uji satu-sisi 95% pada akurasi seimbang cross-fit
+    e4["v_naive"] = e4.balacc_emp > e4.bd + 1e-12                      # estimator lama (maks. atas ambang) vs batas KDE
+    e4["v_hist"] = e4.balacc_emp > e4.bd_hist + 1e-12                  # definisi lama (histogram), untuk perbandingan
     e4c = e4[e4.adversary.isin(["A1", "A3"])]
-    viol = (e4c.balacc_emp > 0.5 * (1 + e4c.tv_bound) + 1e-12)
-    M.add("rMimicViol", str(int(viol.sum())))
-    M.add("rMimicN", str(int(len(viol))))
+    M.add("rMimicViol", str(int(e4c.v_cf.sum())))
+    M.add("rMimicN", str(int(len(e4c))))
+    M.add("rMimicViolNaive", str(int(e4c.v_naive.sum())))
+    M.add("rMimicViolHist", str(int(e4c.v_hist.sum())))
     e4a2 = e4[e4.adversary == "A2"]
-    M.add("rMimicViolTwo", str(int((e4a2.balacc_emp > 0.5 * (1 + e4a2.tv_bound) + 1e-12).sum())))
+    M.add("rMimicViolTwo", str(int(e4a2.v_cf.sum())))
     M.add("rMimicNTwo", str(int(len(e4a2))))
-    M.safe("rBalAccShapeMax", lambda: f"{e4[e4.variant == 'gbm_shape'].groupby(['adversary', 'r']).balacc_emp.mean().max():.3f}")
-    M.safe("rBalAccLevelMax", lambda: f"{d3.groupby(['adversary', 'r']).balacc_emp.mean().max():.3f}")
+    M.safe("rMimicTvGap", lambda: f"{(e4c.tv_bound - e4c.tv_kde).mean():.3f}")
+    M.safe("rMimicTvGapSmall", lambda: f"{(e4c[e4c.r == e4c.r.min()].tv_bound - e4c[e4c.r == e4c.r.min()].tv_kde).mean():.3f}")
+    M.safe("rMimicOptimism", lambda: f"{(e4c.balacc_emp - e4c.ba_cf).mean():.3f}")
+    M.safe("rMimicNullBA", lambda: f"{(0.5 * (1 + e4c.ks_null)).mean():.3f}")
+    M.safe("rMimicSmallR", lambda: f"{e4c.r.min():g}")
+    M.safe("rBoundSmallR", lambda: f"{e4c[e4c.r == e4c.r.min()].bd.mean():.3f}")
+    M.safe("rBoundSmallRLo", lambda: f"{(0.5 * (1 + e4c[e4c.r == e4c.r.min()].tv_kde_hi)).mean():.3f}")
+    M.safe("rBoundSmallRHi", lambda: f"{(0.5 * (1 + e4c[e4c.r == e4c.r.min()].tv_kde_lo)).mean():.3f}")
+    M.safe("rBalAccShapeMax", lambda: f"{e4[e4.variant == 'gbm_shape'].groupby(['adversary', 'r']).ba_cf.mean().max():.3f}")
+    M.safe("rBalAccLevelMax", lambda: f"{d3.groupby(['adversary', 'r']).ba_cf.mean().max():.3f}")
     M.safe("rBoundMax", lambda: f"{0.5 * (1 + tv.max()):.3f}")
     M.safe("rBoundAtMid", lambda: f"{0.5 * (1 + tv.loc[0.5]):.3f}")
-    M.safe("rBalAccAtMidOne", lambda: f"{d3[(d3.adversary == 'A1') & np.isclose(d3.r, 0.5)].balacc_emp.mean():.3f}")
+    M.safe("rBalAccAtMidOne", lambda: f"{d3[(d3.adversary == 'A1') & np.isclose(d3.r, 0.5)].ba_cf.mean():.3f}")
     M.safe("rRgridMax", lambda: f"{max(ex['r_grid']):g}")
 
     # ---------------- F4: deterensi (E6)
