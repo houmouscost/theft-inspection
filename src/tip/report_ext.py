@@ -103,6 +103,8 @@ def stage_report_ext(cfg: dict, dirs: dict, M, save_tab, save_fig, LAB):
                         if (b, p, pol) in gi.index:
                             M.add(f"rSe{nm}B{bn}P{pn}{pl}", f"{100 * gi.loc[(b, p, pol), 'und']:.2f}")
                             M.add(f"rSeSt{nm}B{bn}P{pn}{pl}", f"{100 * gi.loc[(b, p, pol), 'st']:.2f}")
+            dd = d[d.policy.str.startswith("milp_") | (d.policy == "interval_level")]
+            M.add(f"rSeDeterMax{nm}", f"{100 * dd.groupby(['budget', 'penalty', 'policy']).deterred.mean().max():.1f}")
             # perbaikan terbaik kebijakan strategis (out-of-sample) relatif thd min(top-k, acak)
             w = g.pivot_table(index=["budget", "penalty"], columns="policy", values="und")
             if {"topk", "random", "milp_joint"} <= set(w.columns):
@@ -134,6 +136,7 @@ def stage_report_ext(cfg: dict, dirs: dict, M, save_tab, save_fig, LAB):
                 M.add(f"rIvShareN{nm}", str(int(ok.sum())))
             M.add(f"rIvGainMax{nm}", f"{100 * gi_.max():.2f}")
             M.add(f"rIvWorseThanBase{nm}", str(int((gi_ < -0.0005).sum())))
+            M.add(f"rLvWorseThanBase{nm}", str(int((gl < -0.0005).sum())))
             iv = d[d.policy == "interval_level"].groupby(["budget", "penalty"])[["iv_lo", "iv_hi", "iv_p"]].mean()
             if (0.02, 3.0) in iv.index:
                 r_ = iv.loc[(0.02, 3.0)]
@@ -443,3 +446,10 @@ def stage_report_ext(cfg: dict, dirs: dict, M, save_tab, save_fig, LAB):
         M.add("rAucNonzeroLevel", f"{g.auc_train_test_nonzero.mean()['gbm_level']:.3f}")
         M.add("rRhoNonzeroLevel", f"{g.spearman_level_nonzero.mean()['gbm_level']:.2f}")
         M.add("rAucNonzeroShape", f"{g.auc_train_test_nonzero.mean()['gbm_shape']:.3f}")
+    df_ = _read(R / "d_deter_feasible.csv")
+    if len(df_):
+        M.add("rFeasMedianM", f"{100 * df_.median_m.iloc[0]:.0f}")
+        for (b_, bn), (p_, pn) in ((x, y_) for x in ((0.02, "Two"), (0.05, "Five")) for y_ in ((1.0, "One"), (3.0, "Three"))):
+            r_ = df_[np.isclose(df_.budget, b_) & np.isclose(df_.penalty, p_)]
+            if len(r_):
+                M.add(f"rFeas{bn}{pn}", f"{100 * r_.frac_feasible.iloc[0]:.1f}")

@@ -365,6 +365,24 @@ def stage_report(cfg: dict, dirs: dict):
                          f"{r.uc:.3f} & {r.md:.3f} & {r.ch:.2f} & {r.cc:.2f}{extra} \\\\")
         lines += [r"\bottomrule", r"\end{tabular}"]
         _save_tab("\n".join(lines), "tab_cert.tex", dirs)
+        if has_tv:      # tabel ringkas untuk badan paper: pasangan kunci (A2 statis/adaptif) untuk dua detektor
+            short = [("gbm_level", "A2@0.6", "A2@0.6"), ("gbm_level", "A2@0.6", "A2"),
+                     ("gbm_level_adv", "A2@0.6", "A2@0.6"), ("gbm_level_adv", "A2@0.6", "A2"), ("gbm_level_adv", "A2", "A2")]
+            pl = lambda c, d: f"{'static' if '@' in c else 'adaptive'} $\\to$ {'static' if '@' in d else 'adaptive'}"
+            gi_ = g.set_index(["variant", "cal", "dep"])
+            sl = [r"\begin{tabular}{llcccccc}", r"\toprule",
+                  r"Detector & Calibr.\ $\to$ deploy. & $\bar m_{\mathrm{cal}}$ & Hoeff.\ UB & $\bar m_{\mathrm{dep}}$ & Cov.\ (H) & KS & UB$+$KS \\", r"\midrule"]
+            pv = None
+            for v, c_, d_ in short:
+                if (v, c_, d_) not in gi_.index:
+                    continue
+                r_ = gi_.loc[(v, c_, d_)]
+                if pv is not None and v != pv:
+                    sl.append(r"\midrule")
+                sl.append(f"{LAB.get(v, _tex(v)) if v != pv else ''} & {pl(c_, d_)} & {r_.mc:.3f} & {r_.uh:.3f} & {r_.md:.3f} & {r_.ch:.2f} & {r_.ks:.2f} & {r_.ua:.3f} \\\\")
+                pv = v
+            sl += [r"\bottomrule", r"\end{tabular}"]
+            _save_tab("\n".join(sl), "tab_cert_short.tex", dirs)
         c = cfg["certificate"]
         M.add("rCertB", _pct(c["budget"]))
         M.add("rCertEps", f"{c['eps']:g}")
@@ -569,6 +587,7 @@ def stage_report(cfg: dict, dirs: dict):
         M.safe("rDeterTopkMaxPhi", lambda: f"{top.loc[top.det.idxmax(), 'penalty']:g}")
         dc = cfg["deterrence"]
         M.add("rDeterBudgets", ", ".join(_pct(b) for b in dc["budgets"]))
+        M.add("rDeterBudgetMax", _pct(max(dc["budgets"])))
         M.add("rDeterPhis", ", ".join(f"{p:g}" for p in dc["penalties"]))
         M.add("rDeterEps", ", ".join(f"{e:g}" for e in dc["eps_grid"]))
         M.add("rDeterK", str(dc.get("br_iters", ex["br_iters"])))

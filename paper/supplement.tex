@@ -1,0 +1,92 @@
+\documentclass[11pt]{article}
+\usepackage[margin=1in]{geometry}
+\usepackage{amsmath,amssymb,booktabs,graphicx,xcolor,cite}
+\usepackage[hidelinks]{hyperref}
+\renewcommand{\thesection}{\Alph{section}}
+\renewcommand{\thetable}{S\arabic{table}}
+\renewcommand{\thefigure}{S\arabic{figure}}
+\newcommand{\gen}[1]{\IfFileExists{generated/#1}{\input{generated/#1}}{\textbf{[\texttt{#1} missing: run \texttt{make run}]}}}
+\newcommand{\genfig}[2]{\IfFileExists{generated/#1}{\includegraphics[width=#2]{generated/#1}}{\fbox{\texttt{#1} missing}}}
+\IfFileExists{generated/numbers.tex}{\input{generated/numbers.tex}}{}
+\DeclareMathOperator{\TV}{TV}
+\newcommand{\NTL}{\mathrm{NTL}}
+\begin{document}
+\title{Supplementary Material for\\ ``Inspecting Under Adaptation: Machine-Advised Inspection Policies against Strategic Electricity Thieves''}
+\author{}
+\date{}
+\maketitle
+
+\noindent This document holds the experiment grids, the tables and figures that the main paper summarises in text, and data notes. All numbers are generated from the result files by the code in the repository. Section and proposition numbers refer to the main paper.
+
+\section{Experiment details}
+\begin{itemize}
+\item \textbf{E1.} Detector quality at budget on real labels (scenario S0).
+\item \textbf{E2.} Adaptive equilibria over $b\in\{\rBudgets\}\%$, $\varphi\in\{\rPenalties\}$, $\varepsilon\in\{0,0.1,0.25,0.5,1\}$ and $\tau\in\{0,0.05\}$ against A1--A3, with $K=\rBrIters$ best-response rounds (sensitivity: $K=\rSensBrIters$).
+\item \textbf{E3.} Non-adaptive thieves at fixed depth $r\in\{\rRStatLo,\rRStatHi\}$.
+\item \textbf{E4.} Balanced accuracy against the bound of Proposition~1. $\TV$ by Gaussian kernel density (Silverman bandwidth, and 0.5 and 2 times it); balanced accuracy by two-fold cross-fitting with a binomial standard error; permutation null with 100 shuffles.
+\item \textbf{E5.} Certificate coverage for the main and the adversarially trained detector at $b=\rCertB\%$, $\varepsilon=\rCertEps$, $\varphi=\rCertPhi$, $\alpha=\rCertAlpha$ and $n\in\{\rCertNcals\}$, with 500 calibration resamples. Calibration pools are adaptive thieves or \emph{static} A2 thieves at $r=0.6$, that is, thieves before they adapt. The Kolmogorov distance is computed between the two miss-probability pools.
+\item \textbf{E6.} Deterrence sweep for A1 over $b\in\{\rDeterBudgets\}\%$, $\varphi\in\{\rDeterPhis\}$ and $\varepsilon\in\{\rDeterEps\}$, with $K=\rDeterK$ rounds.
+\item \textbf{E7.} Strategy-aware policies at $b\in\{2,5\}\%$ and $\varphi\in\{1,3\}$, against thieves who choose both the attack (A1--A3, or A4 in S3) and the depth. The joint grid has $6\times6$ cells plus upper score quantiles, and one-dimensional grids have 12. The interval rule searches all bands of the 12 level cells and the probabilities $\{b,2b,4b,8b,\tfrac12\tfrac1{1+\varphi},\tfrac1{1+\varphi},1\}$.
+\item \textbf{E9.} Quantal-response thieves, who pick action $a$ with probability proportional to $\exp(\lambda U_{ja}/\max_a G_{ja})$ for $\lambda\in\{\rBdLambdas\}$, and transfer-attack thieves, who best-respond to a surrogate detector trained on half the training split.
+\item \textbf{Robustness.} Depth caps $r\le0.5$ and $r\le0.7$, and the CNN detector.
+\end{itemize}
+
+\section{Detector quality and the budget sweep}
+\begin{table}[!htbp]
+\centering\caption{Detector quality on real SGCC labels (scenario S0), mean over \rNSeeds{} seeds (AUC: mean$\pm$sd). R@$b$: recall when the top $b$ of the test split is inspected; P@\rBmid\%: precision at $b=\rBmid\%$.}
+\resizebox{\columnwidth}{!}{\gen{tab_detector.tex}}
+\end{table}
+\begin{table}[!htbp]
+\centering\caption{Worst-case (over A1--A3) undetected NTL (\% of system load) for adaptive thieves, GBM (shape+level), $\tau=0$, mean$\pm$sd over seeds.}
+\resizebox{\columnwidth}{!}{\gen{tab_budget.tex}}
+\end{table}
+\begin{figure}[!htbp]
+\centering\genfig{fig_tradeoff.pdf}{0.8\columnwidth}
+\caption{Robustness versus consistency across $\varepsilon$ (point labels). Horizontal: undetected NTL for static thieves (mean over A1--A3) at the depth given in the legend. Vertical: worst-case undetected NTL over A1--A3 for adaptive thieves. $b=\rBmid\%$, $\varphi=\rPhiMid$, GBM (shape+level). The whole frontier spans well under one percentage point.}
+\end{figure}
+\section{Deterrence sweep}
+\begin{figure}[!htbp]
+\centering\genfig{fig_deter.pdf}{0.78\textwidth}
+\caption{Deterrence sweep (A1, GBM shape+level, mean over seeds). Left: fraction of thieves choosing $r=0$ versus budget. Right: the same against the floor index $\varepsilon b(1+\varphi)$ for $\varepsilon>0$; full deterrence sets in at the threshold of Proposition~3 of the main paper (dashed). Blue: $\varphi=1$; red: $\varphi=3$.}
+\end{figure}
+\section{Level-matched thieves and the UCI replication}
+\begin{table}[!htbp]
+\centering\caption{Level-typical (S1) versus level-matched (S2) thieves; GBM (shape+level), $b=\rBmid\%$, $\varphi=\rPhiMid$. Stolen energy and undetected NTL are in \% of system load for adaptive thieves; the last column is the recovered share (\%) of static thieves at $\varepsilon=0$.}
+\resizebox{\columnwidth}{!}{\gen{tab_s2.tex}}
+\end{table}
+\begin{table}[!htbp]
+\centering\caption{UCI replication (change-aware GBM trained on synthetic attacks, $b=\rBmid\%$, $\varphi=\rPhiMid$, \rUciSeeds{} seeds). Stat.\ rec.: recovered share (\%) of static thieves at $r=0.6$; adaptive depth, stolen energy and undetected NTL (\% of load, mean$\pm$sd).}
+\resizebox{\columnwidth}{!}{\gen{tab_uci.tex}}
+\end{table}
+\section{Bounded rationality and knowledge}
+\begin{figure}[!htbp]
+\centering\genfig{fig_bounded.pdf}{0.78\textwidth}
+\caption{Quantal-response thieves (GBM shape+level, $\varphi=1$): undetected NTL versus rationality $\lambda$ under top-$k$ (solid) and random inspection (dashed). Dotted lines: best response. Crosses: transfer attack against a surrogate detector under top-$k$. A1 and A3 nearly coincide.}
+\end{figure}
+\section{Solver and equilibrium checks}
+On \rSolverN{} subsamples of \rSolverNsub{} calibration thieves, the exact MILP (HiGHS, \rSolverTime\,s limit) did not reach optimality. The local search ($\approx$\rSolverLocalTime\,s) found a better policy in \rSolverLocalBeatsMilp{} of \rSolverN{} cases, improving on uniform inspection by \rSolverLocalVsUniform\% against \rSolverMilpVsUniform\% for the MILP incumbent. In the \rSolverNdual{} cases where the MILP returned a dual bound, the local solution lies within \rSolverDualGapMax\% of it (mean \rSolverDualGapMean\%). These are upper bounds on the true optimality gap, because the dual bounds of big-$M$ formulations are weak.
+
+Best-response iteration converged in \rConvMain\% of adaptive equilibria at $K=\rBrIters$ rounds. Non-convergence is concentrated in \rConvWorstCell{}, where only \rConvWorst\% of equilibria converged. This is the one case in which the ranking constrains thieves. With $K=\rSensBrIters$ all equilibria converged (\rConvSens\%), and undetected NTL changed by at most \rSensMaxDiff{} percentage points (mean \rSensMeanDiff{}), so no conclusion depends on $K$ (Table~S5). All deterrence-sweep equilibria also converged (\rDeterConv\%).
+\begin{table}[!htbp]
+\centering\caption{Share of converged adaptive equilibria over all E2 settings for $K=\rBrIters$ and $K=\rSensBrIters$ best-response rounds, and the largest change in undetected NTL between the two (percentage points of system load).}
+\resizebox{\columnwidth}{!}{\gen{tab_conv.tex}}
+\end{table}
+\section{Certificates: full table}
+Table~S6 lists every calibration--deployment pair. For rows with identical calibration and deployment pools, the pool is split at random, so KS measures sampling noise only.
+\begin{table}[t]
+\centering\caption{Miss-rate certificates at $b=\rCertB\%$, $\varepsilon=\rCertEps$, $\varphi=\rCertPhi$, $n=\rCertNcal$ calibration thieves, target coverage \rCertTarget{}; mean over seeds and 500 resamples. $\bar m_{\mathrm{cal}}$, $\bar m_{\mathrm{dep}}$: mean miss probability in the calibration and deployment pools. Hoeff.\ UB: Hoeffding bound on the deployment mean. $\hat q$: conformal quantile. Cov.\ (H/C): coverage of the Hoeffding and conformal statements.}
+\resizebox{\textwidth}{!}{\gen{tab_cert.tex}}
+\end{table}
+\section{Per-detector response}
+\begin{table}[!htbp]
+\centering\caption{Per-detector response at $b=\rBmid\%$, $\varphi=\rPhiMid$, $\varepsilon=0$. Stat.\ rec.: recovered share (\%) of static thieves at $r=\rRStatHi$. $\bar r^\star$: mean equilibrium depth of adaptive thieves. Adapt.\ rec.: recovered share (\%) of adaptive thieves. The last row is uniform random inspection.}
+\resizebox{\textwidth}{!}{\gen{tab_variants.tex}}
+\end{table}
+\section{SGCC data notes}
+The raw file has \rDRawRows{} rows. \rDAllMissing{} rows have no reading at all (\rDAllMissingThieves{} of them labelled thieves) and are dropped. Among the retained rows, \rDAllZero{} series are all zero (\rDAllZeroThieves{} labelled thieves). \rDDupRows{} rows belong to \rDDupGroups{} groups of identical series; \rDDupGroupsPos{} groups have positive consumption and \rDDupConflict{} groups carry conflicting labels. All labelled thieves come first in the file. Dropping the zero-load consumers from training and testing changes the real-label AUC of the main detector from \rAucLevel{} to \rAucNonzeroLevel{} and leaves the level--score correlation at \rRhoNonzeroLevel{}; for the shape-only detector the AUC becomes \rAucNonzeroShape{}. Among the \rNSelPos{} consumers with positive load, the labelled-theft rate is \rDecLo\% in the lowest consumption decile and \rDecHi\% in the highest, and it peaks at \rMissPeak\% for consumers with \rMissPeakBin\% of readings missing (Spearman correlation between missing fraction and label \rMissRho{}). Table~S8 gives the rates by class.
+\begin{table}[!htbp]
+\centering\caption{Labelled-theft rate in SGCC by consumption decile (\rNSelPos{} consumers with positive load, about 4{,}026 per decile) and by share of missing readings.}
+\resizebox{\columnwidth}{!}{\gen{tab_selection.tex}}
+\end{table}
+
+\end{document}

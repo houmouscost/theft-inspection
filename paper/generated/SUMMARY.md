@@ -2,7 +2,7 @@
 
 - seeds: [0, 1, 2, 3, 4]
 - data source: sgcc
-- tables: tab_budget.tex, tab_cert.tex, tab_conv.tex, tab_detector.tex, tab_main.tex, tab_onset.tex, tab_robust.tex, tab_s2.tex, tab_selection.tex, tab_strategic.tex, tab_uci.tex, tab_variants.tex
+- tables: tab_budget.tex, tab_cert.tex, tab_cert_short.tex, tab_conv.tex, tab_detector.tex, tab_main.tex, tab_onset.tex, tab_robust.tex, tab_s2.tex, tab_selection.tex, tab_strategic.tex, tab_uci.tex, tab_variants.tex
 - figures: fig_bounded.pdf, fig_deter.pdf, fig_eps.pdf, fig_mimicry.pdf, fig_policy.pdf, fig_tradeoff.pdf
 
 ## Numbers (macro -> value)
@@ -176,6 +176,7 @@
 - `\rDeterAdv` = A1
 - `\rDeterBelowMax` = 18.8
 - `\rDeterBmax` = 50
+- `\rDeterBudgetMax` = 50
 - `\rDeterBudgets` = 2, 5, 10, 15, 20, 25, 30, 40, 50
 - `\rDeterConv` = 100.0
 - `\rDeterEps` = 0, 0.25, 0.5, 1
@@ -189,6 +190,11 @@
 - `\rEpsGainMax` = 0.27
 - `\rEpsGainMid` = 0.12
 - `\rEscapeMin` = 98.0
+- `\rFeasFiveOne` = 17.1
+- `\rFeasFiveThree` = 30.3
+- `\rFeasMedianM` = 36
+- `\rFeasTwoOne` = 8.6
+- `\rFeasTwoThree` = 14.3
 - `\rIvGainMaxSOne` = 1.36
 - `\rIvGainMaxSTwo` = 0.57
 - `\rIvPMaxSOne` = 0.24
@@ -210,6 +216,8 @@
 - `\rIvWorseThanBaseSOne` = 0
 - `\rIvWorseThanBaseSTwo` = 3
 - `\rLoadRatio` = 1.59
+- `\rLvWorseThanBaseSOne` = 0
+- `\rLvWorseThanBaseSTwo` = 2
 - `\rMaxBOnePlusPhi` = 0.2
 - `\rMeanROne` = 0.90
 - `\rMeanRThree` = 0.90
@@ -317,6 +325,10 @@
 - `\rSeBestRelMaxSThree` = 22.4
 - `\rSeBestRelMaxSTwo` = 16.2
 - `\rSeBestRelMaxUci` = 0.5
+- `\rSeDeterMaxSOne` = 0.0
+- `\rSeDeterMaxSThree` = 5.6
+- `\rSeDeterMaxSTwo` = 0.5
+- `\rSeDeterMaxUci` = 0.5
 - `\rSeGainMaxSOne` = 1.25
 - `\rSeGainMaxSThree` = 0.36
 - `\rSeGainMaxSTwo` = 0.26

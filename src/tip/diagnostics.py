@@ -109,12 +109,28 @@ def zero_load_table(X, y, miss, F, cfg, seeds) -> pd.DataFrame:
     return pd.DataFrame(rows)
 
 
+def deterrence_feasibility(X, y, F, r_max: float, budgets, penalties) -> pd.DataFrame:
+    """Syarat perlu deterensi untuk kebijakan yang hanya bergantung pada level terlapor (Prop. 4b): pencuri i dapat
+    dideterensi hanya bila massa konsumen jujur pada rentang level yang dapat dicapainya,
+    m_i = P_honest(log level in [L_i + log(1 - r_max), L_i]), tidak melebihi b (1 + phi)."""
+    L = F[:, LOGM]
+    srt = np.sort(L[y == 0])
+    elig = (y == 0) & (X.mean(1) > 0)
+    hi, lo = L[elig], L[elig] + np.log(1.0 - r_max)
+    m = (np.searchsorted(srt, hi, side="right") - np.searchsorted(srt, lo, side="left")) / len(srt)
+    rows = [{"budget": b, "penalty": p, "threshold": b * (1 + p), "frac_feasible": float((m <= b * (1 + p)).mean()),
+             "median_m": float(np.median(m)), "n": int(elig.sum())} for b in budgets for p in penalties]
+    return pd.DataFrame(rows)
+
+
 def run(cfg: dict, dirs: dict, X, y, miss, F):
     R = dirs["results"]
     if int(y.sum()) == 0:        # tanpa label (mis. UCI) diagnostik ini tidak bermakna
         return None, None
     sel = selection_table(X, y, miss)
     sel.to_csv(R / "d_selection.csv", index=False)
+    ex = cfg["experiment"]
+    deterrence_feasibility(X, y, F, max(ex["r_grid"]), ex["budgets"], ex["penalties"]).to_csv(R / "d_deter_feasible.csv", index=False)
     zl = zero_load_table(X, y, miss, F, cfg, cfg["seeds"])
     zl.to_csv(R / "d_zero_load.csv", index=False)
     if cfg["data"]["source"] == "sgcc":
