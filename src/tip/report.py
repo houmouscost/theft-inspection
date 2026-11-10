@@ -535,6 +535,10 @@ def stage_report(cfg: dict, dirs: dict):
         M.safe("rDeterNtlTopkBmax", lambda: f"{100 * d[(d.budget == bmax) & (d.eps == 0)].ntl.max():.2f}")
         M.add("rDeterBmax", _pct(bmax))
 
+    # ---------------- ekstensi TSG (E7, E9, onset, UCI, batas kedalaman, CNN)
+    from .report_ext import stage_report_ext
+    stage_report_ext(cfg, dirs, M, _save_tab, _save_fig, LAB)
+
     # ---------------- numbers.tex + ringkasan
     _save_tab(M.tex().rstrip("\n"), "numbers.tex", dirs)
     summ = [f"# Summary ({cfg['name']})", "", f"- seeds: {cfg['seeds']}", f"- data source: {cfg['data']['source']}",

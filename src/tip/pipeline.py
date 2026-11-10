@@ -346,8 +346,14 @@ def run_seed(cfg: dict, seed: int, X, y, miss, F) -> dict[str, list]:
                                            **{k: v for k, v in m.items() if k != "precision"}})
                     for mode in sp.get("modes", ["score", "level", "joint"]):
                         n_s, n_l = sp.get("n_bins", [6, 6]) if mode == "joint" else (sp.get("n_bins_1d", 12),) * 2
-                        cells = sb.make_cells(hs_c, hl_c, mode, n_s, n_l)
+                        extra_q = sorted({1 - bb for bb in sp.get("budgets", ex["budgets"])} | {0.95, 0.99}) \
+                            if mode in ("score", "joint") else ()
+                        cells = sb.make_cells(hs_c, hl_c, mode, n_s, n_l, extra_q)
+                        s_lv = np.r_[0.0, np.unique(np.r_[np.linspace(0, 1, n_s + 1)[1:-1], list(extra_q)])]
                         Kt, Kht = cells.of(S_t, L_t), cells.of(hs_t, hl_t)
+                        thr = np.quantile(hs_c, 1 - b)   # sel skor yang seluruhnya di atas kuantil (1-b)
+                        top = [k for k in range(cells.K) if cells.score_bin(k) >= 0 and
+                               (cells.edges_s[cells.score_bin(k) - 1] if cells.score_bin(k) > 0 else -np.inf) >= thr - 1e-12]
                         fits = [("milp_" + mode, cells.of(S_c, L_c), uG_c, cells.of(hs_c, hl_c))]
                         if mode in sp.get("oracle_modes", ["joint"]):
                             fits.append(("oracle_" + mode, Kt, uG_t, Kht))
@@ -356,7 +362,8 @@ def run_seed(cfg: dict, seed: int, X, y, miss, F) -> dict[str, list]:
                                 pv, info = sb.fit_milp(Kfit, Gfit, Khfit, cells.K, b, phi,
                                                        sp.get("time_limit", 120), sp.get("mip_gap", 0.01))
                             else:
-                                pv, info = sb.fit_local(Kfit, Gfit, Khfit, cells.K, b, phi, sp.get("max_iter", 40))
+                                pv, info = sb.fit_local(Kfit, Gfit, Khfit, cells.K, b, phi, sp.get("max_iter", 40),
+                                                        top_cells=top or None)
                             m = sb.evaluate(pv, Kt, uG_t, Kht, b, phi, total_load)
                             idx = m.pop("idx")
                             rows["e7"].append({**base, "budget": b, "penalty": phi, "policy": pname,
@@ -368,6 +375,7 @@ def run_seed(cfg: dict, seed: int, X, y, miss, F) -> dict[str, list]:
                                     rows["e7p"].append({"seed": seed, "variant": vname, "budget": b, "penalty": phi,
                                                         "mode": mode, "cell": k, "p": float(pv[k]), "n_honest_cal": int(nh[k]),
                                                         "s_bin": k // (len(cells.edges_l) + 1) if mode == "joint" else (k if mode == "score" else -1),
+                                                        "s_q_lo": float(s_lv[cells.score_bin(k)]) if cells.score_bin(k) >= 0 and cells.score_bin(k) < len(s_lv) else np.nan,
                                                         "l_bin": k % (len(cells.edges_l) + 1) if mode == "joint" else (k if mode == "level" else -1)})
 
         # validasi solver: pada subsampel kecil pencuri kalibrasi, bandingkan pencarian lokal dengan MILP eksak

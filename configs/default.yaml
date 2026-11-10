@@ -102,3 +102,10 @@ report:
   # Hasil run sensitivitas yang ikut dilaporkan (dilewati bila belum ada)
   br_sensitivity: results/sgcc_br24
   level_matched: results/sgcc_s2
+  depth_caps: {0.5: results/sgcc_rmax05, 0.7: results/sgcc_rmax07}
+  cnn: results/sgcc_cnn
+  onset: results/sgcc_onset
+  onset_variant: gbm_change_adv
+  uci: results/uci_main
+  uci_variant: gbm_change_syn
+  strategic_table_penalties: [3.0]

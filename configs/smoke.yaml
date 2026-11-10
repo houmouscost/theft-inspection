@@ -32,6 +32,10 @@ deterrence:
 report:
   br_sensitivity: null
   level_matched: null
+  depth_caps: null
+  cnn: null
+  onset: null
+  uci: null
 
 strategic:
   budgets: [0.05]

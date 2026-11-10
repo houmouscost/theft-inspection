@@ -41,6 +41,13 @@ class Cells:
         ns, nl = len(self.edges_s) + 1, len(self.edges_l) + 1
         return {"score": ns, "level": nl, "joint": ns * nl}[self.mode]
 
+    @property
+    def n_l(self) -> int:
+        return len(self.edges_l) + 1
+
+    def score_bin(self, k: int) -> int:
+        return k if self.mode == "score" else (k // self.n_l if self.mode == "joint" else -1)
+
     def of(self, s, l):
         ks = np.searchsorted(self.edges_s, s, side="right")
         kl = np.searchsorted(self.edges_l, l, side="right")
@@ -51,8 +58,11 @@ class Cells:
         return ks * (len(self.edges_l) + 1) + kl
 
 
-def make_cells(hs: np.ndarray, hl: np.ndarray, mode: str, n_s: int, n_l: int) -> Cells:
-    qs = np.unique(np.quantile(hs, np.linspace(0, 1, n_s + 1)[1:-1]))
+def make_cells(hs: np.ndarray, hl: np.ndarray, mode: str, n_s: int, n_l: int, extra_q=()) -> Cells:
+    """Batas = kuantil konsumen jujur. `extra_q` menambah batas skor di kuantil atas (mis. 1-b) supaya
+    kelas kebijakan memuat top-k pada anggaran b (pembanding harus termasuk dalam kelas)."""
+    lv = np.unique(np.r_[np.linspace(0, 1, n_s + 1)[1:-1], list(extra_q)])
+    qs = np.unique(np.quantile(hs, lv))
     ql = np.unique(np.quantile(hl, np.linspace(0, 1, n_l + 1)[1:-1]))
     return Cells(mode, qs, ql)
 
@@ -200,7 +210,7 @@ def _rebalance(p, locked, Kth, G, nh, c, B, iters=20):
 
 
 def fit_local(Kth: np.ndarray, G: np.ndarray, Kh: np.ndarray, K: int, b: float, phi: float,
-              max_iter: int = 40):
+              max_iter: int = 40, top_cells=None):
     """Pencarian lokal: mulai dari acak seragam (p = b), tiap langkah tetapkan satu sel ke nilai kandidat
     (termasuk ambang deterensi 1/(1+phi)) dan seimbangkan ulang sisa anggaran secara seragam.
     Hanya menerima perbaikan -> tak pernah lebih buruk daripada acak pada data latih."""
@@ -213,6 +223,18 @@ def fit_local(Kth: np.ndarray, G: np.ndarray, Kh: np.ndarray, K: int, b: float, 
     locked = np.zeros(K, dtype=bool)
     p, f = _rebalance(np.full(K, b), locked, Kth, G, nh, c, B)
     f_start = f
+    start = "uniform"
+    if top_cells is not None and len(top_cells):   # titik awal kedua: mirip top-k (sel skor teratas p=1)
+        lk = np.zeros(K, dtype=bool); lk[top_cells] = True
+        q = np.zeros(K); q[top_cells] = 1.0
+        q, fq = _rebalance(q, lk, Kth, G, nh, c, B)
+        if q is None:   # sel teratas melebihi anggaran -> skala turun
+            q = np.zeros(K); q[top_cells] = 1.0
+            used = nh @ q
+            q[top_cells] = min(1.0, B / max(used, 1e-12)) * 0.999
+            q, fq = _rebalance(q, lk, Kth, G, nh, c, B)
+        if q is not None and fq < f:
+            p, f, locked, start = q, fq, lk, "topk"
     it = 0
     for it in range(max_iter):
         best = (f, None, None)
@@ -226,5 +248,5 @@ def fit_local(Kth: np.ndarray, G: np.ndarray, Kh: np.ndarray, K: int, b: float, 
         if best[1] is None:
             break
         f, p, locked = best
-    return np.clip(p, 0, 1), {"status": 0, "solve_s": time.time() - t0, "iters": it + 1,
+    return np.clip(p, 0, 1), {"status": 0, "solve_s": time.time() - t0, "iters": it + 1, "start": start,
                               "train_obj": f, "train_obj_uniform": f_start, "n_locked": int(locked.sum())}

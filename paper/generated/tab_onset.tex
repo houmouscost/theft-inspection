@@ -1,0 +1,13 @@
+\begin{tabular}{lcccccccccccc}
+\toprule
+ & & & \multicolumn{2}{c}{$L{=}0$\,d} & \multicolumn{2}{c}{$L{=}30$\,d} & \multicolumn{2}{c}{$L{=}90$\,d} & \multicolumn{2}{c}{$L{=}180$\,d} & \multicolumn{2}{c}{$L{=}365$\,d} \\
+\cmidrule(lr){4-5}\cmidrule(lr){6-7}\cmidrule(lr){8-9}\cmidrule(lr){10-11}\cmidrule(lr){12-13}
+Detector & AUC & Stat.\ rec. & $\bar r^\star$ & Und./Stolen & $\bar r^\star$ & Und./Stolen & $\bar r^\star$ & Und./Stolen & $\bar r^\star$ & Und./Stolen & $\bar r^\star$ & Und./Stolen \\
+\midrule
+GBM (shape+level) & 0.756 & 7.9 & 0.88 & 4.08/4.08 & 0.88 & 3.95/3.95 & 0.88 & 3.72/3.72 & 0.88 & 3.39/3.39 & 0.88 & 2.72/2.72 \\
+GBM + change & 0.761 & 8.0 & 0.88 & 4.08/4.08 & 0.88 & 3.96/3.96 & 0.88 & 3.74/3.74 & 0.88 & 3.39/3.39 & 0.88 & 2.71/2.71 \\
+GBM + change + adv.\ tr. & 0.711 & 32.0 & 0.69 & 2.63/2.82 & 0.69 & 2.54/2.70 & 0.69 & 2.35/2.50 & 0.69 & 2.13/2.25 & 0.71 & 1.70/1.81 \\
+\midrule
+Random ($\varepsilon{=}1$) & -- & -- & 0.89 & 4.15/4.24 & 0.89 & 4.03/4.11 & 0.89 & 3.79/3.86 & 0.89 & 3.43/3.50 & 0.89 & 2.77/2.83 \\
+\bottomrule
+\end{tabular}

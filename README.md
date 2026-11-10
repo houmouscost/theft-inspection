@@ -2,7 +2,7 @@
 
 Repositori riset dan draf paper: **kebijakan inspeksi berbantuan ML yang kokoh terhadap pencuri listrik yang beradaptasi** (permainan Stackelberg pada data SGCC).
 
-> **Status: pipeline penuh sudah dijalankan pada SGCC asli (5 seed) dan paper sudah diisi dari hasilnya.** Tersisa: nama penulis, URL repositori, verifikasi `refs.bib` dan kuartil jurnal.
+> **Status: pipeline penuh + ekstensi untuk IEEE Trans. Smart Grid (kebijakan sadar-strategi, skenario onset, rasionalitas terbatas, CNN, batas kedalaman, replikasi UCI) sudah dijalankan dan paper (10 halaman) diisi dari hasilnya.** Tersisa: nama penulis, URL repositori, verifikasi `refs.bib` dan kuartil jurnal.
 > Angka di folder `results/smoke` berasal dari data sintetis dan **tidak boleh** masuk paper.
 > Semua tabel dan gambar di paper dihasilkan otomatis dari CSV; tidak ada angka yang ditulis tangan.
 
@@ -33,13 +33,16 @@ src/tip/
   data/         loader SGCC, pembersihan, split per konsumen, generator sintetis
   features.py   fitur SHAPE (invarian skala) vs LEVEL (peka skala) vs missingness
   detector.py   gradient boosting + kalibrasi Platt
-  adversary.py  A1 skala konstan, A2 skala bertahap, A3 mimikri bentuk
+  adversary.py  A1 skala konstan, A2 skala bertahap, A3 mimikri bentuk, A4-L onset eksogen + ramp L
   policies.py   keluarga kebijakan P(eps, tau) dengan anggaran tepat
-  game.py       best-response pencuri + keseimbangan Stackelberg
+  game.py       best-response pencuri + keseimbangan Stackelberg + quantal response
+  stackelberg.py kebijakan sadar-strategi per sel (skor x level): pencarian lokal + MILP DOBSS
+  deep.py       pembanding Wide & Deep CNN (PyTorch, CPU)
   theory.py     TV mimikri, KS, ambang deterensi
   conformal.py  sertifikat miss-rate (split-conformal + Hoeffding)
   pipeline.py   orkestrasi: data -> eksperimen -> laporan
-  report.py     gambar PDF + tabel LaTeX otomatis
+  report.py     gambar PDF + tabel LaTeX + makro angka (numbers.tex)
+  report_ext.py tabel/gambar ekstensi (E7, E9, S3, UCI, CNN, batas r)
 scripts/        download_sgcc.sh, fetch_sgcc_github.py (ekstraksi zip terpecah + cek CRC)
 tests/          uji unit + uji asap pipeline
 paper/          main.tex (IEEEtran), refs.bib, generated/ (diisi pipeline)
@@ -123,6 +126,10 @@ Metrik utama: **NTL lolos** = Σ(1−p_i)·G_i / total beban sistem, dengan G_i 
 | `results/<nama>/e0_data.csv` | provenans per seed: ukuran data, jumlah pencuri S1, median beban |
 | `results/<nama>/e6_deterrence.csv` | sapuan deterensi (Prop. 3) ke anggaran besar |
 | `results/<nama>/config_used.yaml` | config efektif run tersebut |
+| `results/<nama>/e7_strategic.csv` | kebijakan sadar-strategi vs top-k/acak/oracle (out-of-sample) |
+| `results/<nama>/e7_policy_cells.csv` | probabilitas inspeksi yang dipelajari per sel |
+| `results/<nama>/e7_solver_check.csv` | pencarian lokal vs MILP eksak (subsampel) + batas dual |
+| `results/<nama>/e9_bounded.csv` | pencuri quantal-response dan serangan transfer |
 | `paper/generated/numbers.tex` | makro `\r...` untuk SETIAP angka di teks paper (lihat juga `SUMMARY.md`) |
 | `paper/generated/tab_*.tex`, `fig_*.pdf` | di-`\input` otomatis oleh `main.tex` |
 
@@ -135,6 +142,14 @@ Metrik utama: **NTL lolos** = Σ(1−p_i)·G_i / total beban sistem, dengan G_i 
 - S2 (pencuri berlevel seperti pencuri berlabel): top-k mengurangi NTL lolos dibanding acak dengan **membatasi** curian konsumen besar, bukan dengan mendeteksinya.
 - E5: sertifikat hanya informatif untuk detektor adv-training yang dikalibrasi pada pencuri statis, dan cakupannya runtuh ke 0 begitu pencuri beradaptasi.
 - Perubahan protokol: konsumen berbeban 0 (±5% konsumen jujur) tidak lagi bisa dipilih sebagai pencuri S1; sebelumnya mereka menggelembungkan `deterred`.
+
+### Ekstensi untuk IEEE Trans. Smart Grid (angka di `SUMMARY.md` / `numbers.tex`)
+
+- **E7 kebijakan sadar-strategi** (`stackelberg.py`): p per sel (skor x level terlapor), dilatih pada pencuri injeksi split kalibrasi, dievaluasi pada pencuri uji yang memilih jenis serangan dan r. Di S1 kebijakan joint menurunkan NTL lolos di semua setting (hingga ±17% vs yang terbaik dari top-k/acak), terutama dengan mengurangi curian; sel level saja (tanpa ML) hampir sama baiknya. Kebijakan yang dipelajari menginspeksi pelapor "rendah tapi tidak minimal". MILP eksak tidak selesai bahkan pada 80 pencuri; pencarian lokal lebih baik dari incumbent MILP dan dalam ≤17% dari batas dual.
+- **S3 onset** (`configs/sens_onset.yaml`): fitur perubahan saja tidak cukup bila dilatih pada label SGCC; dengan adversarial training pada serangan onset, inversi level hilang, pencuri adaptif mengurangi kedalaman, top-k jauh lebih baik daripada acak, dan kebijakan sadar-strategi menambah perbaikan.
+- **Robustness**: CNN Wide & Deep (AUC lebih tinggi, inversi sama, gagal sama), batas r 0.5/0.7 (pencuri memilih batas), quantal response dan serangan transfer (top-k tetap tidak lebih baik daripada acak untuk A1/A3).
+- **UCI** (`configs/uci.yaml`, tanpa label): A2/A4 terdeteksi bila detektor dilatih pada serangan itu; A1/A3 tak terlihat; bila pencuri bebas memilih serangan, tak ada kebijakan yang mengalahkan acak.
+- **Catatan lingkungan**: PyTorch hanya untuk CNN; `tip/__init__.py` menyetel `KMP_AFFINITY=disabled` (beberapa sandbox melarang afinitas thread).
 
 ## 8. Rencana publikasi (Q1/Q2)
 
@@ -169,7 +184,8 @@ Satu celah yang menentukan: satu-satunya data berlabel pencuri yang umum dipakai
 - [x] Laporkan fraksi `converged` dan sensitivitas terhadap `br_iters`
 - [x] Isi semua `\todo{}` hasil di `paper/main.tex` hanya dengan angka dari tabel hasil (via `numbers.tex`; tersisa penulis + URL)
 - [x] Ablasi missingness dilaporkan di badan paper
-- [ ] Verifikasi ulang semua entri `refs.bib` (halaman/volume) dan kuartil jurnal target
+- [ ] Verifikasi ulang semua entri `refs.bib` (halaman/volume) dan kuartil jurnal target. Entri baru (paruchuri2008, conitzer2006, tambe2011, mckelvey1995) sudah dicek ke CrossRef; DOI dataset UCI (trindade2015) belum terverifikasi
+- [ ] Batas halaman TSG: paper saat ini 10 halaman; cek aturan terbaru (halaman berbayar) sebelum mengirim
 - [x] Hapus `paper/generated/*` hasil uji asap sebelum menjalankan `make run`
 - [ ] Tambahkan URL repositori dan lisensi
 

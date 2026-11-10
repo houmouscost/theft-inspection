@@ -1,7 +1,7 @@
 PY ?= python
 export PYTHONPATH := src
 
-.PHONY: install test smoke data run main sens report paper all clean
+.PHONY: install test smoke data run main sens uci report paper all clean
 
 install:
 	$(PY) -m pip install -r requirements.txt
@@ -17,7 +17,7 @@ smoke:
 data:
 	bash scripts/download_sgcc.sh
 
-# Run penuh: data -> eksperimen utama (E1-E6) -> sensitivitas (br_iters, S2) -> laporan
+# Run penuh: data -> eksperimen utama (E1-E9) -> sensitivitas/ekstensi (br_iters, S2, batas r, CNN, onset S3, UCI) -> laporan
 run: main sens report
 
 main:
@@ -30,6 +30,16 @@ sens:
 	$(PY) -m tip.pipeline --config configs/sens_br24.yaml --stage experiments
 	$(PY) -m tip.pipeline --config configs/sens_level_matched.yaml --stage data
 	$(PY) -m tip.pipeline --config configs/sens_level_matched.yaml --stage experiments
+	for c in sens_rmax05 sens_rmax07 sens_cnn sens_onset; do \
+	  $(PY) -m tip.pipeline --config configs/$$c.yaml --stage data && \
+	  $(PY) -m tip.pipeline --config configs/$$c.yaml --stage experiments || exit 1; done
+	$(MAKE) uci
+
+# Replikasi di luar SGCC (UCI ElectricityLoadDiagrams20112014, tanpa label)
+uci:
+	$(PY) scripts/fetch_uci_eld.py
+	$(PY) -m tip.pipeline --config configs/uci.yaml --stage data
+	$(PY) -m tip.pipeline --config configs/uci.yaml --stage experiments
 
 report:
 	$(PY) -m tip.pipeline --config configs/default.yaml --stage report

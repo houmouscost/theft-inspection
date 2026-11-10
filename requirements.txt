@@ -5,3 +5,4 @@ scikit-learn>=1.4
 matplotlib>=3.8
 pyyaml>=6.0
 pytest>=8.0
+torch>=2.1          # hanya untuk pembanding CNN (configs/sens_cnn.yaml)
