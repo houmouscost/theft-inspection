@@ -1,0 +1,12 @@
+# Skenario S2: pencuri tersimulasi berlevel seperti pencuri SGCC berlabel (bukan tipikal-jujur).
+# Menjawab keterbatasan "level-typical thieves". Grid dipersempit ke b, phi tengah.
+name: sgcc_s2
+paths:
+  paper_generated: results/sgcc_s2/paper_unused
+experiment:
+  thief_sampling: level_matched
+  budgets: [0.02]
+  penalties: [1.0]
+  tau_grid: [0.0]
+certificate: null
+deterrence: null

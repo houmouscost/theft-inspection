@@ -1,0 +1,9 @@
+# Sensitivitas: br_iters 8 -> 24 (ceklis README: laporkan fraksi converged + sensitivitas br_iters).
+# Hanya E1-E4; E5/E6 dimatikan. Dibaca oleh laporan sgcc_main lewat report.br_sensitivity.
+name: sgcc_br24
+paths:
+  paper_generated: results/sgcc_br24/paper_unused
+experiment:
+  br_iters: 24
+certificate: null
+deterrence: null

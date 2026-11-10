@@ -8,6 +8,7 @@
 \newcommand{\todo}[1]{{\color{red}[\textbf{TODO:} #1]}}
 \newcommand{\gen}[1]{\IfFileExists{generated/#1}{\input{generated/#1}}{\textbf{[\texttt{#1} missing: run \texttt{make run}]}}}
 \newcommand{\genfig}[2]{\IfFileExists{generated/#1}{\includegraphics[width=#2]{generated/#1}}{\fbox{\texttt{#1} missing}}}
+\IfFileExists{generated/numbers.tex}{\input{generated/numbers.tex}}{}
 \DeclareMathOperator{\TV}{TV}
 \newcommand{\NTL}{\mathrm{NTL}}
 
@@ -17,7 +18,7 @@
 \maketitle
 
 \begin{abstract}
-Electricity-theft detectors are almost always evaluated as static classifiers, yet a utility acts on them by \emph{allocating a scarce inspection budget}, and a thief who can probe or infer the detector will adapt. We study this as a Stackelberg game between a utility that publishes a randomised inspection policy built on a detector's scores and thieves who choose how much consumption to under-report. We (i) show that reporting a constant fraction of true load leaves every scale-free feature unchanged, so shape-based detection against such thieves is bounded by the total-variation distance between honest and shifted thief \emph{levels}; (ii) introduce a one-parameter family of policies that mixes ML ranking with a uniform random floor and prove a robustness--consistency identity together with a Becker-type deterrence condition; and (iii) give finite-sample miss-rate certificates and measure how they fail when the deployed adversary is stronger than the calibration adversary. Experiments on the public SGCC data with simulated adaptive thieves \todo{summarise the 2--3 headline numbers from \texttt{results/sgcc\_main/SUMMARY.md}}.
+Electricity-theft detectors are almost always evaluated as static classifiers, yet a utility acts on them by \emph{allocating a scarce inspection budget}, and a thief who can probe or infer the detector will adapt. We study this as a Stackelberg game between a utility that publishes a randomised inspection policy built on a detector's scores and thieves who choose how much consumption to under-report. We (i) show that reporting a constant fraction of true load leaves every scale-free feature unchanged, so shape-based detection against such thieves is bounded by the total-variation distance between honest and shifted thief \emph{levels}; (ii) introduce a one-parameter family of policies that mixes ML ranking with a uniform random floor and prove a robustness--consistency identity together with a Becker-type deterrence condition; and (iii) give finite-sample miss-rate certificates and measure how they fail when the deployed adversary is stronger than the calibration adversary. Experiments on the public SGCC data with simulated adaptive thieves show that a gradient-boosting detector with AUC \rAucLevel{} on the real labels recovers essentially nothing from best-responding thieves: at a \rBmid\% budget at least \rEscapeMin\% of stolen energy escapes under every policy in the family, and mixing in random inspection changes undetected loss by at most \rEpsGainMax{} percentage points across all budgets and fines studied. Full deterrence appears exactly where the deterrence condition predicts, far outside realistic budgets. A miss-rate certificate calibrated on non-adaptive thieves (bound \rCertAdvStatUB) is violated in every trial once those thieves adapt (realised miss rate \rCertAdvShiftMiss).
 \end{abstract}
 
 \begin{IEEEkeywords}
@@ -69,7 +70,7 @@ where $p_i(r)$ is the inclusion probability of the report $y_i(r)$ under the \em
 \end{equation}
 
 \subsection{Adversary classes}
-\textbf{A1} scales the series, $y=(1-r)x$. \textbf{A2} ramps the scale in from a random onset, $y_t=(1-r w_t)x_t$. \textbf{A3} reports the level $(1-r)\bar x$ with the normalised profile of the nearest honest consumer in \emph{shape-feature} space, so only level features can reveal it. A3 is held out from adversarial training in the defended detector to test generalisation to an unseen class.
+\textbf{A1} scales the series, $y=(1-r)x$. \textbf{A2} ramps the scale in from a random onset, $y_t=(1-r w_t)x_t$. \textbf{A3} reports the level $(1-r)\bar x$ with the normalised profile of the nearest honest consumer in \emph{shape-feature} space, so only level features can reveal it. A3 is held out from adversarial training in the defended detector to test generalisation to an unseen class. Depth is chosen from a finite grid $\mathcal{R}$ (Section~\ref{sec:protocol}).
 
 \section{Theory}\label{sec:theory}
 Let $\mathrm{shape}(\cdot)$ denote features invariant to positive rescaling of the series (coefficient of variation, autocorrelations, weekend ratio, quantile ratios, etc.) and $\mathrm{level}(\cdot)$ their complement.
@@ -84,9 +85,10 @@ Proposition~\ref{prop:mimic} says that when thieves are level-typical, shape inf
 
 \begin{proposition}[Robustness floor and consistency]\label{prop:floor}
 Under policy~\eqref{eq:policy}, every consumer has $p_i\ge\varepsilon b$ whatever the reports. For fixed (non-adaptive) reports, the recovered energy is affine in $\varepsilon$:
-\[
-R(\varepsilon)=\varepsilon\, b\sum_i G_i + (1-\varepsilon)\sum_i q_iG_i,\quad\text{hence}\quad R(\varepsilon)\ge(1-\varepsilon)R(0).
-\]
+\begin{align*}
+R(\varepsilon)&=\varepsilon\, b\sum_i G_i + (1-\varepsilon)\sum_i q_iG_i,\\
+\text{hence}\quad R(\varepsilon)&\ge(1-\varepsilon)R(0).
+\end{align*}
 \end{proposition}
 \begin{proof}
 Immediate from \eqref{eq:policy} and $q_i\ge0$; $q$ does not depend on $\varepsilon$.
@@ -106,54 +108,115 @@ Proposition~\ref{prop:floor} is affine only for fixed reports. Against adaptive 
 For a deployed policy and an adversary class $\mathcal{A}$, let $m_i=1-p_i$ be the miss probability of an active thief. With $n$ calibration thieves drawn exchangeably with deployment thieves, (i) the split-conformal quantile $\hat q$ of $\{m_i\}$ at rank $\lceil(n+1)(1-\alpha)\rceil$ bounds a fresh thief's miss probability with probability at least $1-\alpha$ \cite{vovk2005,lei2018}, and (ii) Hoeffding's inequality bounds the population mean miss rate by $\bar m+\sqrt{\ln(1/\alpha)/(2n)}$. Both require exchangeability, which \emph{fails by construction when the deployed adversary is stronger than the calibration adversary}; experiment E5 measures the coverage loss in that case. We therefore state certificates \emph{relative to an adversary class}, not unconditionally.
 
 \section{Experimental Protocol}\label{sec:protocol}
-\textbf{Data.} SGCC: 42{,}372 consumers, 1{,}034 days, about 8.5\% labelled thieves, about 25\% missing cells. Preprocessing: negative values to missing, per-consumer linear interpolation, winsorisation at mean$+3\sigma$; missing fraction is retained as a separate feature and ablated. Splits are per consumer (60/20/20, stratified); SGCC has no theft timestamps, so temporal splits are impossible. Five seeds.
+\textbf{Data.} SGCC daily consumption (kWh): after dropping consumers with no recorded reading, \rNConsumers{} consumers over \rNDays{} days, \rNLabelled{} labelled thieves (\rTheftRate\%), and \rNanRate\% missing cells. Preprocessing: negative values to missing, per-consumer linear interpolation, winsorisation at mean$+3\sigma$; the pre-imputation missing fraction is kept as a separate feature and ablated. Splits are per consumer (60/20/20, stratified); SGCC has no theft timestamps, so temporal splits are impossible. All results are over \rNSeeds{} seeds (split, detector and thief draw).
 
-\textbf{Detectors.} Histogram gradient boosting with Platt calibration on a held-out calibration split. Variants: shape+level; shape only; shape+level with adversarial training on A1/A2; shape+level+missingness.
+\textbf{Detectors.} Histogram gradient boosting with Platt calibration on the calibration split. Variants: shape+level (the main detector); shape only; shape+level with adversarial training on A1/A2 attacks applied to honest training consumers (A3 held out); shape+level+missingness.
 
-\textbf{Scenarios.} S0 uses the real labels without adaptation (E1). S1 designates 8.5\% of test-split honest consumers as thieves whose true load is known, so attacks are applied to known load; real labelled thieves are excluded from S1 because their un-attacked load is unobserved.
+\textbf{Scenarios.} S0 uses the real labels without adaptation (E1). S1 designates 8.5\% of the test-split honest consumers (on average \rNSOneThieves{} of \rNTestHonest{} per seed) as thieves whose true load is known, so attacks are applied to known load; real labelled thieves are excluded from S1 because their un-attacked load is unobserved. Consumers with zero recorded load (\rZeroLoadHonest\% of honest consumers) cannot under-report and are not eligible as S1 thieves. S2 is identical except that thieves are drawn with importance weights equal to the histogram ratio of log mean load between labelled thieves and eligible consumers, so their true level matches that of real SGCC thieves (median daily load \rMedLoadSTwo{} versus \rMedLoadSOne{} in S1 and \rMedLoadThief{} for labelled thieves). Depth is chosen from $r\in\{0,0.1,\dots,\rRgridMax\}$.
 
-\textbf{Experiments.} E1 detector quality at budget. E2 adaptive equilibria over $b\in\{1,2,5\}\%$, $\varphi\in\{0,1,3\}$, $\varepsilon\in\{0,0.1,0.25,0.5,1\}$, $\tau\in\{0,0.05\}$, adversaries A1--A3. E3 non-adaptive thieves at fixed $r$ (consistency). E4 empirical balanced accuracy versus the bound of Proposition~\ref{prop:mimic}. E5 certificate coverage under same-class and cross-class calibration.
+\textbf{Experiments.} E1: detector quality at budget on real labels. E2: adaptive equilibria over $b\in\{\rBudgets\}\%$, $\varphi\in\{\rPenalties\}$, $\varepsilon\in\{0,0.1,0.25,0.5,1\}$, $\tau\in\{0,0.05\}$, adversaries A1--A3, with $K{=}\rBrIters$ best-response rounds (sensitivity: $K{=}\rSensBrIters$). E3: non-adaptive thieves at fixed $r\in\{\rRStatLo,\rRStatHi\}$ (consistency). E4: empirical balanced accuracy versus the bound of Proposition~\ref{prop:mimic}. E5: certificate coverage for the main and the adversarially trained detector at $b{=}\rCertB\%$, $\varepsilon{=}\rCertEps$, $\varphi{=}\rCertPhi$, $\alpha{=}\rCertAlpha$, $n\in\{\rCertNcals\}$, 500 calibration resamples; calibration pools are either adaptive thieves or \emph{static} A2 thieves at $r{=}0.6$, i.e.\ thieves as they appear before they adapt. E6: deterrence sweep for A1 over $b\in\{\rDeterBudgets\}\%$, $\varphi\in\{\rDeterPhis\}$, $\varepsilon\in\{\rDeterEps\}$, with $K{=}\rDeterK$ rounds. Besides $\NTL^{\mathrm{und}}$ we report the \emph{recovered share} $\sum_i p_iG_i/\sum_i G_i$; uniform random inspection recovers exactly $b$.
 
 \section{Results}\label{sec:results}
-\todo{Write after the full run. Do not state any number that is not in a generated table. Suggested order: E1, then E2/E3 headline, then E4 consistency with Prop.~1, then E5.}
+\subsection{Detector quality on real labels (E1)}
+Table~\ref{tab:det} reproduces the familiar picture. The shape+level detector reaches AUC \rAucLevel$\pm$\rAucSdLevel{} and, inspecting \rBmid\% of consumers, finds \rRecLevel{} of the labelled thieves at precision \rPrecLevel{} against a base rate of \rBaseRate\%. Dropping level features costs AUC (\rAucShape), and adding the missing-value fraction gains \rMissGain{} (\rAucMiss), consistent with \cite{alfian2026}; all other results exclude missingness. Adversarial training lowers AUC on the real labels to \rAucAdv.
 
 \begin{table}[t]
-\centering\caption{Detector quality on real SGCC labels (scenario S0), mean over seeds. \todo{caption detail}}\label{tab:det}
-\small\gen{tab_detector.tex}
+\centering\caption{Detector quality on real SGCC labels (scenario S0), mean over \rNSeeds{} seeds (AUC: mean$\pm$sd). R@$b$: recall when the top $b$ of the test split is inspected; P@\rBmid\%: precision at $b{=}\rBmid\%$.}\label{tab:det}
+\resizebox{\columnwidth}{!}{\gen{tab_detector.tex}}
 \end{table}
+
+\subsection{Real-label skill does not transfer to under-reporting}
+Labelled SGCC thieves consume \emph{more} than honest consumers (median daily load \rMedLoadThief{} versus \rMedLoadHonest, a ratio of \rLoadRatio), so the detector learns that high level is suspicious. Under-reporting lowers level and therefore lowers the score. Even without adaptation, the main detector inspects fewer simulated thieves than random inspection would in \rStatRecallBelowRandom{} of \rStatCells{} static settings at $b{=}\rBmid\%$ (e.g.\ \rStatRecallOneLow\% of A1 thieves at $r{=}\rRStatLo$, against \rBmid\% at random). It still recovers more \emph{energy} than random (\rStatRecEOneLow\% of the A1 theft at $r{=}\rRStatLo$) because inspections concentrate on large consumers (Table~\ref{tab:var}).
+
+\subsection{Adaptive thieves (E2) and consistency (E3)}
+Table~\ref{tab:main} is the central result. Under pure top-$k$, best-responding thieves under-report at an average depth of \rMeanROne{} (A1), essentially the cap of the grid, and none is inspected: undetected NTL (\rNtlOneLo\% of system load) equals stolen energy (\rStolenOne\%). Across all policies at $b{=}\rBmid\%$, $\varphi{=}\rPhiMid$, at least \rEscapeMin\% of stolen energy escapes, and the expected fraction of active thieves inspected never exceeds \rRecallAdaptMax\%, which is the random floor at $\varepsilon{=}1$. Moving from $\varepsilon{=}0$ to $\varepsilon{=}1$ changes undetected NTL by at most \rEpsGainMid{} percentage points at this setting and by at most \rEpsGainMax{} points anywhere in the grid (Fig.~\ref{fig:eps}, Table~\ref{tab:budget}). The fine $\varphi$ changes it by at most \rPhiEffectMax{} points and the boundary softness $\tau$ by at most \rTauEffectMax. This is Proposition~\ref{prop:deter} at work: in the grid $b(1+\varphi)\le\rMaxBOnePlusPhi$, so every thief with positive load prefers stealing at any inclusion probability the floor can impose, and ML advice can only change \emph{which} thieves sit above the threshold. At $r$ near the cap none does.
 
 \begin{table*}[t]
-\centering\caption{Undetected NTL (\% of system load), mean$\pm$sd over seeds; GBM (shape+level), mid budget and penalty, $\tau=0$. \todo{state $b,\varphi$ from config}}\label{tab:main}
-\small\gen{tab_main.tex}
+\centering\caption{Undetected NTL (\% of system load), mean$\pm$sd over seeds; GBM (shape+level), $b{=}\rBmid\%$, $\varphi{=}\rPhiMid$, $\tau{=}0$. Static columns are non-adaptive thieves at fixed depth $r$ (fine irrelevant). The last row is the stolen energy at $\varepsilon{=}0$; the gap to it is what the policy recovers.}\label{tab:main}
+\footnotesize\setlength{\tabcolsep}{2.5pt}\gen{tab_main.tex}
 \end{table*}
 
-\begin{figure}[t]
-\centering\genfig{fig_tradeoff.pdf}{0.8\columnwidth}
-\caption{Robustness versus consistency across $\varepsilon$ (labels). \todo{interpret}}\label{fig:tradeoff}
-\end{figure}
+\begin{figure*}[t]
+\centering\genfig{fig_eps.pdf}{0.9\textwidth}
+\caption{Undetected NTL versus the random share $\varepsilon$ for adaptive thieves ($b{=}\rBmid\%$, $\varphi{=}\rPhiMid$, $\tau{=}0$; mean$\pm$sd over seeds). Seed-to-seed spread reflects different thief draws and is shared across $\varepsilon$; within a seed the curves are nearly flat. Only adversarial training against the matching attack (A2) moves the curve.}\label{fig:eps}
+\end{figure*}
 
-\begin{figure}[t]
-\centering\genfig{fig_mimicry.pdf}{0.8\columnwidth}
-\caption{Empirical balanced accuracy of the detector against the bound of Proposition~\ref{prop:mimic}. \todo{interpret}}\label{fig:mimic}
-\end{figure}
+\textbf{Adversarial training.} Training on A1/A2 attacks raises the recovered share against static A2 thieves at $r{=}\rRStatHi$ from \rStatRecLevelTwo\% to \rStatRecAdvTwo\%. Adaptive A2 thieves respond by lowering their depth from \rAdaptRLevelTwo{} to \rAdaptRAdvTwo. Undetected NTL falls from \rAdaptNtlLevelTwo\% to \rAdaptNtlAdvTwo\%, mostly because less is stolen; only \rAdaptRecAdvTwo\% of what is stolen is recovered. The gain does not extend to A1, although A1 was in the training mix (static recovered share \rStatRecAdvOne\%), nor to the held-out A3 (\rStatRecAdvThree\%). By Proposition~\ref{prop:mimic}, a uniformly scaled honest consumer is distributed like a lower-level honest consumer, so there is little to learn; A2 is learnable because its ramp leaves a shape trace.
+
+\begin{table*}[t]
+\centering\caption{Per-detector response at $b{=}\rBmid\%$, $\varphi{=}\rPhiMid$, $\varepsilon{=}0$. Stat.\ rec.: recovered share (\%) of static thieves at $r{=}\rRStatHi$. $\bar r^\star$: mean equilibrium depth of adaptive thieves. Adapt.\ rec.: recovered share (\%) of adaptive thieves. The last row is uniform random inspection.}\label{tab:var}
+\footnotesize\gen{tab_variants.tex}
+\end{table*}
 
 \begin{table}[t]
-\centering\caption{Certificate coverage (target $1-\alpha$) under same-class and cross-class calibration.}\label{tab:cert}
-\small\gen{tab_cert.tex}
+\centering\caption{Worst-case (over A1--A3) undetected NTL (\% of system load) for adaptive thieves, GBM (shape+level), $\tau{=}0$, mean$\pm$sd over seeds.}\label{tab:budget}
+\resizebox{\columnwidth}{!}{\gen{tab_budget.tex}}
 \end{table}
+
+\textbf{Consistency.} For static thieves the inequality of Proposition~\ref{prop:floor} held in \rPropTwoOk{} of \rPropTwoN{} settings. Averaged over adversaries and depths at $b{=}\rBmid\%$, moving from $\varepsilon{=}0$ to $\varepsilon{=}1$ costs \rConsistCost{} percentage points of undetected NTL. Fig.~\ref{fig:tradeoff} shows the resulting robustness--consistency frontier: both axes move by fractions of a percentage point, so on SGCC the choice of $\varepsilon$ is nearly immaterial at realistic budgets.
+
+\begin{figure}[t]
+\centering\genfig{fig_tradeoff.pdf}{0.85\columnwidth}
+\caption{Robustness versus consistency across $\varepsilon$ (point labels). Horizontal: undetected NTL for static thieves (mean over A1--A3) at the depth given in the legend. Vertical: worst-case undetected NTL over A1--A3 for adaptive thieves. $b{=}\rBmid\%$, $\varphi{=}\rPhiMid$, GBM (shape+level). Note the scales: the whole frontier spans well under one percentage point.}\label{fig:tradeoff}
+\end{figure}
+
+\subsection{Mimicry bound (E4)}
+Fig.~\ref{fig:mimic} compares the balanced accuracy of the best threshold on the detector score, $(1+\mathrm{KS})/2$, with the bound $(1+\TV)/2$ of Proposition~\ref{prop:mimic}, where $\TV$ is estimated from 60-bin histograms of log mean load. The bound is respected in all \rMimicN{} A1/A3 settings (\rMimicViol{} violations) and also for A2 (\rMimicViolTwo{} of \rMimicNTwo), which the proposition does not cover. The shape-only detector stays below \rBalAccShapeMax{} at every depth, as the scale-invariance argument predicts. The main detector rises to \rBalAccLevelMax{} at $r{=}\rRgridMax$ against a bound of \rBoundMax; at $r{=}0.5$ it reaches \rBalAccAtMidOne{} (A1) against \rBoundAtMid. Level is therefore the only usable signal against A1/A3, and the detector exploits a good part of it. However, the signal points the wrong way for inspection: deep under-reporters look like small honest consumers, whom a detector trained on SGCC labels ranks \emph{low}.
+
+\begin{figure}[t]
+\centering\genfig{fig_mimicry.pdf}{0.85\columnwidth}
+\caption{Empirical balanced accuracy (best threshold on the detector score) against the bound of Proposition~\ref{prop:mimic}, mean over seeds. Shape-only detection of A1 is at chance at every depth; the shape+level detector stays below the bound.}\label{fig:mimic}
+\end{figure}
+
+\subsection{Deterrence (E6)}
+Fig.~\ref{fig:deter} extends the budget far beyond the realistic range. All \rDeterAboveN{} settings with $\varepsilon b(1+\varphi)\ge1$ deter every thief (minimum \rDeterAboveMin\%), as Proposition~\ref{prop:deter} guarantees. Below the threshold at most \rDeterBelowMax\% of thieves are deterred. Pure top-$k$ never deters more than \rDeterTopkMax\% of thieves, even at $b{=}\rDeterTopkMaxB\%$ and $\varphi{=}\rDeterTopkMaxPhi$, because thieves can always move below its threshold. All E6 equilibria converged (\rDeterConv\%).
+
+\begin{figure*}[t]
+\centering\genfig{fig_deter.pdf}{0.85\textwidth}
+\caption{Deterrence sweep (A1, GBM shape+level, mean over seeds). Left: fraction of thieves choosing $r{=}0$ versus budget. Right: the same against the floor index $\varepsilon b(1+\varphi)$ for $\varepsilon>0$; full deterrence sets in at the threshold of Proposition~\ref{prop:deter} (dashed). Blue: $\varphi{=}1$; red: $\varphi{=}3$.}\label{fig:deter}
+\end{figure*}
+
+\subsection{Level-matched thieves (S2)}
+When simulated thieves have the level of real SGCC thieves (Table~\ref{tab:s2}), more is stolen and non-adaptive thieves become visible: the recovered share of static A1 thieves at $r{=}\rRStatLo$ rises to \rSTwoStatRecOne\%. Adaptive thieves still escape detection (at most \rSTwoRecallMax\% inspected under top-$k$; escaped share $\ge$\rSTwoEscapeMin\%). Here, however, the ML ranking does constrain behaviour: the largest thieves reduce their depth to stay below the threshold, so stolen energy under top-$k$ is \rSTwoStolenCut\% lower than under random inspection (\rSTwoStolenOne\% versus \rSTwoStolenOneHi\% for A1). As a result top-$k$ leaves \emph{less} undetected NTL than random inspection (\rSTwoNtlOneLo\% versus \rSTwoNtlOneHi\%). ML advice thus pays off through the stealing it prevents, not through the thefts it detects, and only when thieves have something to lose by looking large.
+
+\begin{table}[t]
+\centering\caption{Level-typical (S1) versus level-matched (S2) thieves; GBM (shape+level), $b{=}\rBmid\%$, $\varphi{=}\rPhiMid$; stolen energy and undetected NTL in \% of system load for adaptive thieves; last column: recovered share (\%) of static thieves at $\varepsilon{=}0$.}\label{tab:s2}
+\resizebox{\columnwidth}{!}{\gen{tab_s2.tex}}
+\end{table}
+
+\subsection{Certificates under adversary shift (E5)}
+Table~\ref{tab:cert} reports $n{=}\rCertNcal$. Whenever calibration and deployment are exchangeable (same pool, random split), Hoeffding coverage is at least \rCertSameCovMin{} against a target of \rCertTarget. For the main detector, however, every certificate is vacuous: even static thieves are missed with mean probability \rCertLevelStatMiss, so the Hoeffding bound exceeds 1 (\rCertLevelStatUB). The split-conformal quantile equals the floor miss probability $1-\varepsilon b=\rCertFloorMiss$ in every row, so its coverage is trivially 1 and carries no information. The certificate becomes informative only for the adversarially trained detector calibrated on static A2 thieves. There it certifies a mean miss rate of at most \rCertAdvStatUB{} (realised \rCertAdvStatMiss). Once the same thieves adapt, the realised miss rate is \rCertAdvShiftMiss{} and Hoeffding coverage drops to \rCertAdvShiftCovH. Calibrating on adaptive thieves restores validity but returns a vacuous bound (\rCertAdvAdaptUB). In this setting a non-vacuous miss-rate guarantee and validity against adaptation could not both be had.
+
+\begin{table*}[t]
+\centering\caption{Miss-rate certificates at $b{=}\rCertB\%$, $\varepsilon{=}\rCertEps$, $\varphi{=}\rCertPhi$, $n{=}\rCertNcal$ calibration thieves, target coverage \rCertTarget; mean over seeds and 500 resamples. $\bar m_{\mathrm{cal}}$, $\bar m_{\mathrm{dep}}$: mean miss probability in the calibration and deployment pools. Hoeff.\ UB: Hoeffding bound on the deployment mean. $\hat q$: conformal quantile. Cov.\ (H/C): coverage of the Hoeffding and conformal statements.}\label{tab:cert}
+\footnotesize\gen{tab_cert.tex}
+\end{table*}
+
+\subsection{Equilibrium convergence}
+At $K{=}\rBrIters$ rounds, \rConvMain\% of adaptive equilibria converged. Non-convergence is concentrated in \rConvWorstCell{} (\rConvWorst\%), the one case in which the threshold actually binds. With $K{=}\rSensBrIters$ all equilibria converged (\rConvSens\%), and undetected NTL changed by at most \rSensMaxDiff{} percentage points (mean \rSensMeanDiff), so no conclusion depends on $K$ (Table~\ref{tab:conv}).
+
+\begin{table}[t]
+\centering\caption{Share of converged adaptive equilibria over all E2 settings, for $K{=}\rBrIters$ and $K{=}\rSensBrIters$ best-response rounds, and the largest change in undetected NTL between the two (percentage points of system load).}\label{tab:conv}
+\resizebox{\columnwidth}{!}{\gen{tab_conv.tex}}
+\end{table}
+
+\section{Discussion}
+Three practical messages follow. First, AUC on SGCC labels says little about what an inspection policy recovers from thieves who under-report. The labelled thieves differ from honest consumers mainly in level, and under-reporting moves level in the direction the detector reads as honest. Second, at realistic budgets and fines the floor index $\varepsilon b(1+\varphi)$ is far below one. Neither random inspection nor any $\varepsilon$-mixture then deters thieves, and the benefit of ML advice comes, if at all, from constraining how much large consumers can steal (S2). Policy evaluation should therefore report stolen energy and the recovered share under best response, not only detection rates. Third, miss-rate certificates are informative only for detectors that catch the calibration thieves, and those are exactly the detectors adaptive thieves learn to evade. Certificates must be stated relative to an adversary class that includes the adaptive response.
 
 \section{Limitations and Threats to Validity}\label{sec:limits}
 \begin{itemize}
-\item \textbf{Simulated adaptation.} No public dataset records adaptive thieves; S1 is semi-synthetic. Conclusions concern robustness of the policy to \emph{modelled} adversaries, not field theft rates.
-\item \textbf{Level-typical thieves.} S1 draws thieves from the honest population, which makes Proposition~\ref{prop:mimic} tight; real thieves may be atypical in level.
-\item \textbf{Missingness.} The missing-value statistic may encode collection artefacts \cite{alfian2026}; all main results exclude it, and the with-missingness variant quantifies the gap.
+\item \textbf{Simulated adaptation.} No public dataset records adaptive thieves; S1 and S2 are semi-synthetic. Conclusions concern robustness of the policy to \emph{modelled} adversaries, not field theft rates.
+\item \textbf{Depth cap.} Depth is limited to $r\le\rRgridMax$; under top-$k$ thieves choose the cap, so stolen and undetected NTL scale with it. Real thieves may face physical or audit limits that bind earlier.
+\item \textbf{Thief level.} S1 draws thieves from the honest population, which makes Proposition~\ref{prop:mimic} tight; S2 re-weights to the level of labelled thieves, but other differences between real and simulated thieves remain.
+\item \textbf{Missingness.} The missing-value statistic may encode collection artefacts \cite{alfian2026}; all main results exclude it, and the with-missingness variant quantifies the gap only on real labels.
 \item \textbf{Expected budget.} Inspections are Bernoulli in expectation; a hard budget needs dependent rounding.
 \item \textbf{Selective labels.} We do not model detector retraining on inspection-selected labels \cite{lakkaraju2017}.
-\item \textbf{Risk-neutral, fully informed thief.} The best response uses the published policy and the detector's scores; partial knowledge would weaken the adversary.
+\item \textbf{Risk-neutral, fully informed thief.} The best response uses the published policy and the detector's scores; partial knowledge would weaken the adversary, and risk aversion would strengthen deterrence.
+\item \textbf{Single dataset.} SGCC is the only widely used labelled theft dataset; generalisation to other utilities is untested.
 \end{itemize}
 
 \section{Conclusion}
-\todo{Two sentences after results.}
+On SGCC, a detector with AUC \rAucLevel{} on real labels recovers essentially none of the energy stolen by thieves who best-respond to a published inspection policy. Mixing in random inspection changes undetected loss by at most \rEpsGainMax{} percentage points, because at realistic budgets and fines the deterrence threshold $\varepsilon b(1+\varphi)\ge1$ is out of reach. Robust inspection must therefore be evaluated and certified against the adaptive response, and the main lever ML offers is to limit how much the largest consumers can steal.
 
 \bibliographystyle{IEEEtran}
 \bibliography{refs}

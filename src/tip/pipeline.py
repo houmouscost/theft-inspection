@@ -60,11 +60,51 @@ def _adv_features(X, y, miss, cfg, rng):
     return np.vstack(out)
 
 
+def _sample_thieves(te_h, n_th, X, y, F, tr, ex, rng):
+    """Pilih konsumen jujur-uji yang dijadikan pencuri (skenario S1/S2).
+
+    * exclude_zero_load (default True): konsumen dengan beban rata-rata 0 tidak bisa mencuri;
+      memasukkannya hanya menggelembungkan metrik `deterred` dan menurunkan recall.
+    * thief_sampling = uniform (S1)      : acak seragam dari kandidat.
+    * thief_sampling = level_matched (S2): bobot = rasio densitas log-level pencuri BERLABEL
+      (split latih) terhadap kandidat, sehingga level beban sebenarnya pencuri tersimulasi
+      mengikuti pencuri SGCC nyata (yang rata-rata berlevel lebih tinggi).
+    """
+    cand = te_h
+    if ex.get("exclude_zero_load", True):
+        cand = te_h[X[te_h].mean(1) > 0]
+    n_th = min(n_th, len(cand))
+    mode = ex.get("thief_sampling", "uniform")
+    if mode == "uniform":
+        return rng.choice(cand, size=n_th, replace=False)
+    if mode == "level_matched":
+        lm = F[:, LOGM]
+        ref = lm[tr][(y[tr] == 1) & (X[tr].mean(1) > 0)]
+        edges = np.quantile(lm[cand], np.linspace(0, 1, 31))
+        edges[0], edges[-1] = -np.inf, np.inf
+        h_ref = np.histogram(ref, bins=edges)[0] / len(ref)
+        g_c = np.histogram(lm[cand], bins=edges)[0] / len(cand)
+        b_of = np.clip(np.searchsorted(edges, lm[cand], side="right") - 1, 0, len(h_ref) - 1)
+        w = h_ref[b_of] / np.maximum(g_c[b_of], 1e-12)
+        if (w > 0).sum() < n_th:   # terlalu sedikit kandidat di bin berbobot -> lantai kecil agar sampel lengkap
+            w = w + 1e-6 * w.max()
+        return rng.choice(cand, size=n_th, replace=False, p=w / w.sum())
+    raise ValueError(f"thief_sampling tidak dikenal: {mode}")
+
+
+def _parse_pool(spec: str):
+    """'A2' -> (A2, None) = pencuri adaptif; 'A2@0.6' -> (A2, 0.6) = pencuri statis r=0.6."""
+    if "@" in spec:
+        k, r = spec.split("@")
+        return k, float(r)
+    return spec, None
+
+
 def run_seed(cfg: dict, seed: int, X, y, miss, F) -> dict[str, list]:
     ex = cfg["experiment"]
     rng = np.random.default_rng(seed)
     tr, cal, te = split_indices(y, cfg["data"]["split"], seed)
-    rows = {"e1": [], "e2": [], "e4": [], "e5": []}
+    rows = {"e0": [], "e1": [], "e2": [], "e4": [], "e5": [], "e6": []}
 
     # ---- latih detektor
     dets: dict[str, Detector] = {}
@@ -94,9 +134,18 @@ def run_seed(cfg: dict, seed: int, X, y, miss, F) -> dict[str, list]:
 
     # ---- populasi S1: konsumen jujur-uji, sebagian dijadikan pencuri adaptif
     te_h = te[y[te] == 0]
-    perm = rng.permutation(te_h)
     n_th = int(round(ex["inject_rate"] * len(te_h)))
-    th_idx, hon_idx = perm[:n_th], perm[n_th:]
+    th_idx = _sample_thieves(te_h, n_th, X, y, F, tr, ex, rng)
+    hon_idx = rng.permutation(np.setdiff1d(te_h, th_idx))
+    load = X.mean(1)
+    rows["e0"].append({"seed": seed, "n_consumers": len(y), "n_days": X.shape[1],
+                       "n_labelled_thieves": int(y.sum()), "nan_rate": float(miss.mean()),
+                       "zero_load_frac_honest": float((load[y == 0] <= 0).mean()),
+                       "median_load_honest": float(np.median(load[y == 0])),
+                       "median_load_labelled_thief": float(np.median(load[y == 1])),
+                       "n_test": len(te), "n_test_honest": len(te_h), "n_s1_thieves": len(th_idx),
+                       "median_load_s1_thief": float(np.median(load[th_idx])),
+                       "median_load_s1_honest": float(np.median(load[hon_idx]))})
     X_th, miss_th = X[th_idx], miss[th_idx]
     total_load = float(X[te_h].sum())
     bank_pool = np.where(y[tr] == 0)[0]
@@ -155,41 +204,76 @@ def run_seed(cfg: dict, seed: int, X, y, miss, F) -> dict[str, list]:
                                        "tv_bound": theory.mimicry_tv(lg, lh, r),
                                        "ks_emp": ks, "balacc_emp": 0.5 * (1 + ks)})
 
-    # ---- E5: sertifikat miss-rate
-    c = cfg["certificate"]
-    if c["variant"] in dets and c["variant"] in game_vars:
-        det = dets[c["variant"]]
+    # ---- E5: sertifikat miss-rate (kalibrasi vs deployment; pool 'A2@0.6' = pencuri statis)
+    c = cfg.get("certificate") or {}
+    cert_vars = c.get("variants", [c["variant"]] if "variant" in c else [])
+    n_cals = c.get("n_cal", 100)
+    n_cals = n_cals if isinstance(n_cals, list) else [n_cals]
+    ar = np.arange(len(th_idx))
+    for vname in cert_vars:
+        if vname not in dets:
+            continue
+        det = dets[vname]
         hs = det.score(F[hon_idx])
         pools = {}
-        need = {k for pair in c["pairs"] for k in pair}
-        for kind in need:
+        for spec in sorted({k for pair in c["pairs"] for k in pair}):
+            kind, rs = _parse_pool(spec)
             S = np.stack([det.score(Fj) for Fj in grid_F[kind]], axis=1)
-            sol = solve(S, grid_G[kind], hs, c["budget"], c["eps"], c["tau"], c["penalty"],
-                        ex["br_iters"], np.random.default_rng(seed))
-            act = sol["idx"] > 0
-            pools[kind] = (1.0 - sol["p_th"])[act]
+            G = grid_G[kind]
+            if rs is None:
+                sol = solve(S, G, hs, c["budget"], c["eps"], c["tau"], c["penalty"],
+                            ex["br_iters"], np.random.default_rng(seed))
+            else:
+                j = int(np.argmin(np.abs(r_grid - rs)))
+                sol = solve(S, G, hs, c["budget"], c["eps"], c["tau"], c["penalty"], fixed_idx=j)
+            act = (sol["idx"] > 0) & (G[ar, sol["idx"]] > 0)
+            pools[spec] = (1.0 - sol["p_th"])[act]
         for cal_k, dep_k in c["pairs"]:
-            pc, pdp = pools[cal_k], pools[dep_k]
-            if len(pc) < 10 or len(pdp) < 10:
-                continue
-            if cal_k == dep_k:   # kalibrasi/deployment dipisah acak -> pertukarkan (exchangeable)
-                pm = rng.permutation(pc)
-                pc, pdp = pm[: len(pm) // 2], pm[len(pm) // 2:]
-            res = conformal.coverage(pc, pdp, c["alpha"], c["n_cal"], c["trials"], rng)
-            rows["e5"].append({"seed": seed, "cal": cal_k, "dep": dep_k, **res})
+            for n_cal in n_cals:
+                pc, pdp = pools[cal_k], pools[dep_k]
+                if cal_k == dep_k:   # kalibrasi/deployment dipisah acak -> pertukarkan (exchangeable)
+                    pm = rng.permutation(pc)
+                    pc, pdp = pm[: len(pm) // 2], pm[len(pm) // 2:]
+                if len(pc) < 10 or len(pdp) < 10:
+                    continue
+                res = conformal.coverage(pc, pdp, c["alpha"], n_cal, c["trials"], rng)
+                rows["e5"].append({"seed": seed, "variant": vname, "cal": cal_k, "dep": dep_k,
+                                   "n_cal_req": n_cal, "mean_miss_cal": float(np.mean(pc)), **res})
+
+    # ---- E6: sapuan deterensi (Prop. 3) ke anggaran besar
+    d = cfg.get("deterrence") or {}
+    if d.get("variant") in dets:
+        det = dets[d["variant"]]
+        hs = det.score(F[hon_idx])
+        for kind in d["adversaries"]:
+            S = np.stack([det.score(Fj) for Fj in grid_F[kind]], axis=1)
+            G = grid_G[kind]
+            for b in d["budgets"]:
+                for phi in d["penalties"]:
+                    for eps in d["eps_grid"]:
+                        sol = solve(S, G, hs, b, eps, 0.0, phi, d.get("br_iters", ex["br_iters"]),
+                                    np.random.default_rng(seed))
+                        m = outcome_metrics(sol, G, total_load)
+                        rows["e6"].append({"seed": seed, "variant": d["variant"], "adversary": kind,
+                                           "budget": b, "penalty": phi, "eps": eps,
+                                           "floor_index": eps * b * (1 + phi),
+                                           "mean_r": float(r_grid[sol["idx"]].mean()), **m})
     return rows
 
 
 def stage_experiments(cfg: dict, dirs: dict):
     X, y, miss, F = _load_artifacts(dirs)
-    acc = {"e1": [], "e2": [], "e4": [], "e5": []}
+    acc = {"e0": [], "e1": [], "e2": [], "e4": [], "e5": [], "e6": []}
     for seed in cfg["seeds"]:
         log(f"seed {seed} ...")
         r = run_seed(cfg, seed, X, y, miss, F)
         for k in acc:
             acc[k].extend(r[k])
-    names = {"e1": "e1_detector", "e2": "e2_game", "e4": "e4_mimicry", "e5": "e5_certificate"}
+    names = {"e0": "e0_data", "e1": "e1_detector", "e2": "e2_game", "e4": "e4_mimicry", "e5": "e5_certificate", "e6": "e6_deterrence"}
     for k, rowsk in acc.items():
+        if not rowsk:   # eksperimen dimatikan di config -> hapus CSV basi dari run sebelumnya
+            (dirs["results"] / f"{names[k]}.csv").unlink(missing_ok=True)
+            continue
         df = pd.DataFrame(rowsk)
         df.to_csv(dirs["results"] / f"{names[k]}.csv", index=False)
         log(f"  {names[k]}.csv  ({len(df)} baris)")
@@ -203,6 +287,9 @@ def main():
     a = ap.parse_args()
     cfg = load_config(a.config)
     dirs = run_dirs(cfg)
+    if a.stage in ("experiments", "all"):   # catat config efektif di samping hasil (dibaca laporan)
+        import yaml
+        (dirs["results"] / "config_used.yaml").write_text(yaml.safe_dump(cfg, sort_keys=False))
     if a.stage in ("data", "all"):
         stage_data(cfg, dirs)
     if a.stage in ("experiments", "all"):

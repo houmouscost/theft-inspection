@@ -2,7 +2,7 @@
 
 Repositori riset dan draf paper: **kebijakan inspeksi berbantuan ML yang kokoh terhadap pencuri listrik yang beradaptasi** (permainan Stackelberg pada data SGCC).
 
-> **Status: kerangka (scaffold) yang sudah lolos uji asap pada data sintetis. Belum ada hasil pada data SGCC nyata.**
+> **Status: pipeline penuh sudah dijalankan pada SGCC asli (5 seed) dan paper sudah diisi dari hasilnya.** Tersisa: nama penulis, URL repositori, verifikasi `refs.bib` dan kuartil jurnal.
 > Angka di folder `results/smoke` berasal dari data sintetis dan **tidak boleh** masuk paper.
 > Semua tabel dan gambar di paper dihasilkan otomatis dari CSV; tidak ada angka yang ditulis tangan.
 
@@ -28,7 +28,7 @@ Landasan teori (di `paper/main.tex`):
 ## 2. Struktur repositori
 
 ```
-configs/        default.yaml (SGCC penuh), smoke.yaml (sintetis, ~15 detik)
+configs/        default.yaml (SGCC penuh), smoke.yaml (sintetis), sens_br24.yaml, sens_level_matched.yaml (S2)
 src/tip/
   data/         loader SGCC, pembersihan, split per konsumen, generator sintetis
   features.py   fitur SHAPE (invarian skala) vs LEVEL (peka skala) vs missingness
@@ -40,7 +40,7 @@ src/tip/
   conformal.py  sertifikat miss-rate (split-conformal + Hoeffding)
   pipeline.py   orkestrasi: data -> eksperimen -> laporan
   report.py     gambar PDF + tabel LaTeX otomatis
-scripts/        download_sgcc.sh
+scripts/        download_sgcc.sh, fetch_sgcc_github.py (ekstraksi zip terpecah + cek CRC)
 tests/          uji unit + uji asap pipeline
 paper/          main.tex (IEEEtran), refs.bib, generated/ (diisi pipeline)
 ```
@@ -69,13 +69,15 @@ bash scripts/download_sgcc.sh     # mencoba Kaggle; jika gagal, mencetak langkah
 
 Hasil akhir harus berupa `data/raw/sgcc/data.csv` dengan kolom `CONS_NO`, `FLAG`, lalu kolom-kolom tanggal. Loader mengurutkan kolom tanggal sendiri.
 
-> Sandbox tempat repo ini dibangun tidak punya akses ke sumber data tersebut. **Loader SGCC belum diuji pada berkas aslinya**; jalankan `make data && make run` dan perbaiki bila format kolom berbeda (satu fungsi: `read_sgcc_csv` di `src/tip/data/loader.py`).
+> Loader SGCC sudah diuji pada berkas asli (sumber GitHub; 42.372 baris, 1.034 kolom tanggal, CRC32 cocok). **Jangan** menggabung arsip GitHub dengan `zip -s 0` + `unzip`: hasilnya CSV terpotong (~33,8 ribu baris) dengan galat yang mudah terlewat. `scripts/fetch_sgcc_github.py` meng-inflate aliran deflate langsung dan memeriksa ukuran + CRC; `download_sgcc.sh` memakainya otomatis bila Kaggle gagal.
 
 ## 5. Menjalankan
 
 ```bash
 make smoke      # data sintetis, 2 seed, ~15 detik. Hanya untuk memeriksa pipeline.
-make run        # SGCC penuh: data -> fitur -> latih -> adversary -> permainan -> laporan
+make run        # SGCC penuh: main (E1-E6) + sens (br_iters=24, skenario S2) + laporan, ~25 menit di 8 core
+make main       # hanya run utama configs/default.yaml
+make sens       # hanya run sensitivitas (configs/sens_br24.yaml, configs/sens_level_matched.yaml)
 make paper      # kompilasi paper/main.pdf (butuh IEEEtran, ada di TeX Live/Overleaf)
 ```
 
@@ -117,17 +119,22 @@ Metrik utama: **NTL lolos** = Σ(1−p_i)·G_i / total beban sistem, dengan G_i 
 | `results/<nama>/e1_detector.csv` | AUC, PR-AUC, recall/presisi@b per varian dan seed |
 | `results/<nama>/e2_game.csv` | semua keseimbangan (mode `adaptive` dan `static`) |
 | `results/<nama>/e4_mimicry.csv` | TV, KS, akurasi seimbang vs `r` |
-| `results/<nama>/e5_certificate.csv` | cakupan conformal/Hoeffding per pasangan kelas |
+| `results/<nama>/e5_certificate.csv` | cakupan conformal/Hoeffding per detektor, pasangan kelas (`A2@0.6` = pencuri statis) dan `n_cal` |
+| `results/<nama>/e0_data.csv` | provenans per seed: ukuran data, jumlah pencuri S1, median beban |
+| `results/<nama>/e6_deterrence.csv` | sapuan deterensi (Prop. 3) ke anggaran besar |
+| `results/<nama>/config_used.yaml` | config efektif run tersebut |
+| `paper/generated/numbers.tex` | makro `\r...` untuk SETIAP angka di teks paper (lihat juga `SUMMARY.md`) |
 | `paper/generated/tab_*.tex`, `fig_*.pdf` | di-`\input` otomatis oleh `main.tex` |
 
-## 7. Apa yang terlihat pada uji asap (data sintetis, bukan hasil)
+## 7. Hasil SGCC (ringkas; angka lengkap di `results/sgcc_main/SUMMARY.md`)
 
-Hanya untuk memastikan mekanisme bekerja:
-- Pencuri adaptif A1 dan A3 meloloskan hampir semua curian di bawah top-k murni (recall mendekati 0).
-- Pada anggaran kecil dan denda sedang, lantai acak `eps·b` terlalu kecil untuk melindungi: sesuai Prop. 3, deterensi mustahil bila `b(1+phi) < 1`.
-- Sertifikat Hoeffding runtuh saat kalibrasi A2 dipakai melawan deployment A1/A3 (cakupan ≈ 0,1 dari target 0,9), tepat seperti yang diprediksi.
-
-Ini berarti hasil SGCC nyata bisa saja **negatif bagi `eps`-campuran**. Lihat bagian 9: itu tetap bisa dipublikasikan bila dilaporkan jujur.
+- Detektor bagus pada label nyata (E1), tetapi pencuri SGCC berlabel berlevel **lebih tinggi** daripada konsumen jujur, sehingga detektor membaca "konsumsi tinggi = mencurigakan". Under-reporting justru menurunkan skor; pencuri statis tersimulasi ditemukan lebih jarang daripada inspeksi acak (per kepala), meski energi yang dipulihkan lebih tinggi (inspeksi terkonsentrasi pada konsumen besar).
+- Pencuri adaptif (E2) memilih kedalaman di batas grid (`r = 0,9`) dan praktis tak satu pun diinspeksi di bawah top-k. `eps` dan `phi` hampir tak berpengaruh, sesuai Prop. 3 karena `b(1+phi)` jauh di bawah 1.
+- Adversarial training hanya membantu terhadap A2 (jejak ramp pada shape); A1 tidak bisa dipelajari (Prop. 1), dan A3 yang ditahan juga tidak.
+- E6: deterensi penuh tepat saat `eps*b*(1+phi) >= 1`; top-k murni tidak pernah mendekati itu.
+- S2 (pencuri berlevel seperti pencuri berlabel): top-k mengurangi NTL lolos dibanding acak dengan **membatasi** curian konsumen besar, bukan dengan mendeteksinya.
+- E5: sertifikat hanya informatif untuk detektor adv-training yang dikalibrasi pada pencuri statis, dan cakupannya runtuh ke 0 begitu pencuri beradaptasi.
+- Perubahan protokol: konsumen berbeban 0 (±5% konsumen jujur) tidak lagi bisa dipilih sebagai pencuri S1; sebelumnya mereka menggelembungkan `deterred`.
 
 ## 8. Rencana publikasi (Q1/Q2)
 
@@ -154,16 +161,16 @@ Satu celah yang menentukan: satu-satunya data berlabel pencuri yang umum dipakai
 5. **Anggaran dalam ekspektasi.** Inspeksi Bernoulli; anggaran keras butuh dependent rounding.
 6. **Label terseleksi.** Retraining dari hasil inspeksi (selective labels) tidak dimodelkan.
 7. **Sertifikat bersyarat.** Sah hanya relatif terhadap kelas adversary; E5 mengukur kegagalannya.
-8. **Konvergensi.** Best-response asinkron bisa tidak konvergen; kolom `converged` di `e2_game.csv` harus dilaporkan (pada uji asap ±79% konvergen). Naikkan `br_iters` bila rendah.
+8. **Konvergensi.** Best-response asinkron bisa tidak konvergen; kolom `converged` di `e2_game.csv` harus dilaporkan (pada uji asap ±79% konvergen). Pada SGCC: 97% konvergen dengan `br_iters=8` (sisa di adv-training vs A2), 100% dengan 24, perubahan NTL ≤0,23 poin persen (`tab_conv.tex`).
 
 ## 10. Ceklis sebelum mengirim paper
 
-- [ ] `make data && make run` selesai tanpa galat pada SGCC asli
-- [ ] Laporkan fraksi `converged` dan sensitivitas terhadap `br_iters`
-- [ ] Isi semua `\todo{}` di `paper/main.tex` hanya dengan angka dari tabel hasil
-- [ ] Ablasi missingness dilaporkan di badan paper
+- [x] `make data && make run` selesai tanpa galat pada SGCC asli
+- [x] Laporkan fraksi `converged` dan sensitivitas terhadap `br_iters`
+- [x] Isi semua `\todo{}` hasil di `paper/main.tex` hanya dengan angka dari tabel hasil (via `numbers.tex`; tersisa penulis + URL)
+- [x] Ablasi missingness dilaporkan di badan paper
 - [ ] Verifikasi ulang semua entri `refs.bib` (halaman/volume) dan kuartil jurnal target
-- [ ] Hapus `paper/generated/*` hasil uji asap sebelum menjalankan `make run`
+- [x] Hapus `paper/generated/*` hasil uji asap sebelum menjalankan `make run`
 - [ ] Tambahkan URL repositori dan lisensi
 
 ## 11. Sitasi data

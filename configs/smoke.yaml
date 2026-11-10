@@ -22,3 +22,13 @@ experiment:
 certificate:
   trials: 100
   n_cal: 40
+
+deterrence:
+  budgets: [0.05, 0.3]
+  penalties: [3.0]
+  eps_grid: [0.0, 1.0]
+  br_iters: 5
+
+report:
+  br_sensitivity: null
+  level_matched: null

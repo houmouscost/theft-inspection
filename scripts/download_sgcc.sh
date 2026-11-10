@@ -3,7 +3,8 @@
 # Dua sumber publik yang diketahui:
 #   (1) Kaggle: bensalem14/sgcc-dataset  -> butuh `pip install kaggle` + ~/.kaggle/kaggle.json
 #   (2) GitHub: henryRDlab/ElectricityTheftDetection -> tiga berkas data.zip, data.z01, data.z02
-# Skrip ini mencoba (1); bila gagal, mencetak langkah manual untuk (2).
+# Skrip ini mencoba (1), lalu (2) via scripts/fetch_sgcc_github.py; bila keduanya gagal,
+# mencetak langkah manual.
 set -euo pipefail
 OUT="data/raw/sgcc"
 mkdir -p "$OUT"
@@ -22,12 +23,17 @@ if command -v kaggle >/dev/null 2>&1; then
 fi
 
 if [ ! -f "$OUT/data.csv" ]; then
+  echo "[..] mencoba GitHub (henryRDlab): ekstraksi langsung + cek CRC"
+  python scripts/fetch_sgcc_github.py --out "$OUT/data.csv" || rm -f "$OUT/data.csv"
+fi
+
+if [ ! -f "$OUT/data.csv" ]; then
   cat <<'EOF'
 [!] Unduhan otomatis tidak tersedia. Langkah manual:
   A) Kaggle  : unduh "SGCC Electricity Theft Detection" (bensalem14), simpan sebagai data/raw/sgcc/data.csv
   B) GitHub  : https://github.com/henryRDlab/ElectricityTheftDetection
-               unduh data.zip, data.z01, data.z02 ke satu folder, lalu:
-                 zip -s 0 data.zip --out merged.zip && unzip merged.zip -d data/raw/sgcc
+               jalankan: python scripts/fetch_sgcc_github.py
+               (JANGAN `zip -s 0` + unzip: hasilnya CSV terpotong ~33.8 ribu baris)
                (pastikan berkas CSV bernama data.csv dengan kolom CONS_NO, FLAG, dan kolom-kolom tanggal)
 Setelah itu: make run
 EOF

@@ -39,6 +39,8 @@ adv_train:
 
 experiment:
   inject_rate: 0.085        # porsi konsumen jujur-uji yang dijadikan pencuri adaptif
+  exclude_zero_load: true   # konsumen berbeban 0 tidak bisa mencuri -> bukan kandidat pencuri
+  thief_sampling: uniform   # uniform (S1) | level_matched (S2: level mengikuti pencuri SGCC berlabel)
   budgets: [0.01, 0.02, 0.05]       # b = fraksi populasi yang diinspeksi
   penalties: [0.0, 1.0, 3.0]        # phi: denda proporsional thd nilai curian
   eps_grid: [0.0, 0.1, 0.25, 0.5, 1.0]   # porsi anggaran acak (eps=1 -> acak murni)
@@ -50,13 +52,30 @@ experiment:
   a3_bank_max: 20000
 
 certificate:
-  variant: gbm_level
-  budget: 0.02
+  # E5. Pool 'A2' = pencuri adaptif (best-response); 'A2@0.6' = pencuri STATIS r=0.6, yaitu
+  # pencuri yang "terlihat" oleh utilitas sebelum mereka beradaptasi (sumber kalibrasi realistis).
+  variants: [gbm_level, gbm_level_adv]
+  budget: 0.05
   penalty: 1.0
   eps: 0.1
   tau: 0.0
   alpha: 0.1
-  n_cal: 100
+  n_cal: [100, 300]
   trials: 500
-  # [kelas kalibrasi, kelas deployment]; pasangan lintas-kelas menguji pergeseran adversary
-  pairs: [[A2, A2], [A2, A1], [A2, A3], [A1, A1]]
+  # [kelas kalibrasi, kelas deployment]
+  pairs: [[A2@0.6, A2@0.6], [A2@0.6, A2], [A2@0.6, A1], [A2@0.6, A3],
+          [A2, A2], [A2, A1], [A2, A3], [A1, A1]]
+
+deterrence:
+  # E6: uji Prop. 3 -- deterensi bila eps*b*(1+phi) >= 1. Anggaran besar sengaja di luar rezim realistis.
+  variant: gbm_level
+  adversaries: [A1]
+  budgets: [0.02, 0.05, 0.1, 0.15, 0.2, 0.25, 0.3, 0.4, 0.5]
+  penalties: [1.0, 3.0]
+  eps_grid: [0.0, 0.25, 0.5, 1.0]
+  br_iters: 16
+
+report:
+  # Hasil run sensitivitas yang ikut dilaporkan (dilewati bila belum ada)
+  br_sensitivity: results/sgcc_br24
+  level_matched: results/sgcc_s2

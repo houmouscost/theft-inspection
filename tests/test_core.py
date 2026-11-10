@@ -94,7 +94,8 @@ def test_smoke_pipeline(tmp_path):
     cfg["seeds"] = [0]
     cfg["data"]["synthetic"]["n_consumers"] = 1200
     cfg["experiment"].update({"budgets": [0.05], "penalties": [1.0], "eps_grid": [0.0, 1.0]})
-    cfg["certificate"].update({"budget": 0.05, "trials": 20, "n_cal": 20})
+    cfg["certificate"].update({"budget": 0.05, "trials": 20, "n_cal": [20]})
+    cfg["deterrence"].update({"budgets": [0.05, 0.3], "penalties": [3.0], "eps_grid": [0.0, 1.0]})
     cfg["paths"] = {k: str(tmp_path / k) for k in ("artifacts", "results", "paper_generated")}
     from tip.config import run_dirs
     dirs = run_dirs(cfg)
@@ -103,3 +104,30 @@ def test_smoke_pipeline(tmp_path):
     import pandas as pd
     e2 = pd.read_csv(dirs["results"] / "e2_game.csv")
     assert len(e2) > 0 and e2["ntl_undetected"].between(0, 1).all()
+    e5 = pd.read_csv(dirs["results"] / "e5_certificate.csv")
+    assert {"A2@0.6"} <= set(e5["cal"]) and e5["cov_conformal"].between(0, 1).all()
+    e6 = pd.read_csv(dirs["results"] / "e6_deterrence.csv")
+    # Prop. 3: eps*b*(1+phi) >= 1  ->  tidak ada pencuri aktif
+    assert (e6.loc[e6["floor_index"] >= 1.0 - 1e-9, "deterred"] == 1.0).all()
+    from tip.report import stage_report
+    stage_report(cfg, dirs)
+    assert (dirs["paper"] / "numbers.tex").exists()
+
+
+def test_thief_sampling_level_matched():
+    from tip.pipeline import _sample_thieves, LOGM
+    rng = np.random.default_rng(0)
+    n = 4000
+    X = np.abs(rng.lognormal(0, 1, size=(n, 1)) * np.ones((1, 30))).astype(np.float32)
+    X[:200] = 0.0                                      # konsumen berbeban nol
+    y = np.zeros(n, dtype=np.int8)
+    order = np.argsort(X[:, 0])
+    y[order[-400:]] = 1                                # pencuri berlabel = level tinggi
+    F = compute_features(X)
+    tr = np.arange(0, n, 2)
+    te_h = np.setdiff1d(np.arange(1, n, 2), np.where(y == 1)[0])
+    ex = {"exclude_zero_load": True, "thief_sampling": "uniform"}
+    u = _sample_thieves(te_h, 150, X, y, F, tr, ex, rng)
+    assert (X[u].mean(1) > 0).all() and len(np.unique(u)) == 150
+    m = _sample_thieves(te_h, 150, X, y, F, tr, {**ex, "thief_sampling": "level_matched"}, rng)
+    assert np.median(F[m, LOGM]) > np.median(F[u, LOGM]) + 0.5
