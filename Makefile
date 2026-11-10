@@ -61,7 +61,7 @@ report:
 
 # latexmk (TeX Live) bila ada; jika tidak, tectonic (mengunduh paket sendiri)
 paper:
-	cd paper && (command -v latexmk >/dev/null && latexmk -pdf -interaction=nonstopmode main.tex || tectonic main.tex)
+	cd paper && (command -v latexmk >/dev/null && (latexmk -pdf -interaction=nonstopmode main.tex && latexmk -pdf -interaction=nonstopmode supplement.tex) || (tectonic main.tex && tectonic supplement.tex))
 
 all: run paper
 

@@ -28,7 +28,8 @@ Landasan teori (di `paper/main.tex`):
 ## 2. Struktur repositori
 
 ```
-configs/        default.yaml (SGCC penuh), smoke.yaml (sintetis), sens_br24.yaml, sens_level_matched.yaml (S2)
+configs/        default.yaml (SGCC penuh), smoke.yaml (sintetis), sens_*.yaml (sensitivitas, S2, S3, CNN), uci.yaml,
+                diag_e4e5.yaml (E4/E5 sampel-hingga), diag_interval(.s2).yaml (aturan interval)
 src/tip/
   data/         loader SGCC, pembersihan, split per konsumen, generator sintetis
   features.py   fitur SHAPE (invarian skala) vs LEVEL (peka skala) vs missingness
@@ -38,14 +39,16 @@ src/tip/
   game.py       best-response pencuri + keseimbangan Stackelberg + quantal response
   stackelberg.py kebijakan sadar-strategi per sel (skor x level): pencarian lokal + MILP DOBSS
   deep.py       pembanding Wide & Deep CNN (PyTorch, CPU)
-  theory.py     TV mimikri, KS, ambang deterensi
-  conformal.py  sertifikat miss-rate (split-conformal + Hoeffding)
+  theory.py     TV mimikri (histogram dan KDE), KS, akurasi seimbang cross-fit, null permutasi, ambang deterensi
+  conformal.py  sertifikat miss-rate (split-conformal + Hoeffding) + jarak Kolmogorov antar pool miss
+  diagnostics.py seleksi label (desil konsumsi, kelas fraksi-hilang), kebersihan data SGCC, AUC tanpa konsumen berbeban nol, syarat perlu deterensi
   pipeline.py   orkestrasi: data -> eksperimen -> laporan
   report.py     gambar PDF + tabel LaTeX + makro angka (numbers.tex)
   report_ext.py tabel/gambar ekstensi (E7, E9, S3, UCI, CNN, batas r)
 scripts/        download_sgcc.sh, fetch_sgcc_github.py (ekstraksi zip terpecah + cek CRC)
 tests/          uji unit + uji asap pipeline
-paper/          main.tex (IEEEtran), refs.bib, generated/ (diisi pipeline)
+paper/          main.tex (IEEEtran, 10 halaman), supplement.tex (bahan pendukung), refs.bib, generated/ (diisi pipeline)
+docs/           literature_review.md (studi literatur + status rekomendasi)
 ```
 
 ## 3. Pemasangan
@@ -53,7 +56,7 @@ paper/          main.tex (IEEEtran), refs.bib, generated/ (diisi pipeline)
 ```bash
 python -m venv .venv && source .venv/bin/activate
 make install          # numpy, pandas, scipy, scikit-learn, matplotlib, pyyaml, pytest
-make test             # 7 uji, ~6 detik
+make test             # 16 uji
 ```
 
 Tidak butuh GPU. Detektor memakai `HistGradientBoostingClassifier` (scikit-learn).
@@ -80,8 +83,11 @@ Hasil akhir harus berupa `data/raw/sgcc/data.csv` dengan kolom `CONS_NO`, `FLAG`
 make smoke      # data sintetis, 2 seed, ~15 detik. Hanya untuk memeriksa pipeline.
 make run        # SGCC penuh: main (E1-E6) + sens (br_iters=24, skenario S2) + laporan, ~25 menit di 8 core
 make main       # hanya run utama configs/default.yaml
+make diag       # diagnostik data SGCC (seleksi label, kebersihan, AUC tanpa beban nol), ~3 menit
+make fs         # E4/E5 dengan estimator sampel-hingga, ~3 menit; aliran acak utama tidak berubah
+make interval   # aturan interval 3-parameter pada S1 dan S2, ~3 menit
 make sens       # hanya run sensitivitas (configs/sens_br24.yaml, configs/sens_level_matched.yaml)
-make paper      # kompilasi paper/main.pdf (butuh IEEEtran, ada di TeX Live/Overleaf)
+make paper      # kompilasi paper/main.pdf dan paper/supplement.pdf (butuh IEEEtran, ada di TeX Live/Overleaf)
 ```
 
 Per tahap:
@@ -121,8 +127,9 @@ Metrik utama: **NTL lolos** = Σ(1−p_i)·G_i / total beban sistem, dengan G_i 
 |--------|-----|
 | `results/<nama>/e1_detector.csv` | AUC, PR-AUC, recall/presisi@b per varian dan seed |
 | `results/<nama>/e2_game.csv` | semua keseimbangan (mode `adaptive` dan `static`) |
-| `results/<nama>/e4_mimicry.csv` | TV, KS, akurasi seimbang vs `r` |
-| `results/<nama>/e5_certificate.csv` | cakupan conformal/Hoeffding per detektor, pasangan kelas (`A2@0.6` = pencuri statis) dan `n_cal` |
+| `results/<nama>/e4_mimicry.csv` | TV (histogram dan KDE), KS, akurasi seimbang naif dan cross-fit (+ galat baku), null permutasi vs `r` |
+| `results/<nama>/e5_certificate.csv` | cakupan conformal/Hoeffding per detektor, pasangan kelas (`A2@0.6` = pencuri statis) dan `n_cal`; jarak KS/TV antar pool, batas Hoeffding yang digeser |
+| `results/<nama>/d_selection.csv`, `d_hygiene.csv`, `d_zero_load.csv`, `d_deter_feasible.csv` | diagnostik data (`make diag`) |
 | `results/<nama>/e0_data.csv` | provenans per seed: ukuran data, jumlah pencuri S1, median beban |
 | `results/<nama>/e6_deterrence.csv` | sapuan deterensi (Prop. 3) ke anggaran besar |
 | `results/<nama>/config_used.yaml` | config efektif run tersebut |
@@ -140,7 +147,9 @@ Metrik utama: **NTL lolos** = Σ(1−p_i)·G_i / total beban sistem, dengan G_i 
 - Adversarial training hanya membantu terhadap A2 (jejak ramp pada shape); A1 tidak bisa dipelajari (Prop. 1), dan A3 yang ditahan juga tidak.
 - E6: deterensi penuh tepat saat `eps*b*(1+phi) >= 1`; top-k murni tidak pernah mendekati itu.
 - S2 (pencuri berlevel seperti pencuri berlabel): top-k mengurangi NTL lolos dibanding acak dengan **membatasi** curian konsumen besar, bukan dengan mendeteksinya.
-- E5: sertifikat hanya informatif untuk detektor adv-training yang dikalibrasi pada pencuri statis, dan cakupannya runtuh ke 0 begitu pencuri beradaptasi.
+- E5: sertifikat hanya informatif untuk detektor adv-training yang dikalibrasi pada pencuri statis, dan cakupannya runtuh ke 0 begitu pencuri beradaptasi. Keruntuhan itu terukur: jarak Kolmogorov antar pool miss = 0,38; menggeser batas Hoeffding sebesar KS memulihkan cakupan tetapi membuat batas 1,000 (kosong). Pertidaksamaan celah berlaku di 160/160 baris.
+- E4 (setelah perbaikan sampel-hingga): TV histogram bias ke atas (rerata 0,018; 0,028 pada r=0,1), sehingga "0 pelanggaran" versi lama terlalu mudah; dengan TV-KDE, estimator naif (maks. atas ambang) melampaui batas di 3/180 setting (semua A3, r=0,1), sedangkan uji satu-sisi pada akurasi seimbang cross-fit di 0/180. Batas pada r=0,1 adalah 0,542 (bukan 0,522-0,528 pada catatan literatur: populasi jujur memuat 5,4% konsumen berbeban nol).
+- Seleksi label: laju pencuri berlabel naik dari 3,1% (desil konsumsi terendah) ke 22,2% (tertinggi); menurut fraksi-hilang tidak monoton (puncak 16,2% pada 40-60% hilang; Spearman 0,07). Hasil tidak berubah bila konsumen berbeban nol dibuang (AUC 0,756 menjadi 0,754).
 - Perubahan protokol: konsumen berbeban 0 (±5% konsumen jujur) tidak lagi bisa dipilih sebagai pencuri S1; sebelumnya mereka menggelembungkan `deterred`.
 
 ### Ekstensi untuk IEEE Trans. Smart Grid (angka di `SUMMARY.md` / `numbers.tex`)
@@ -148,6 +157,7 @@ Metrik utama: **NTL lolos** = Σ(1−p_i)·G_i / total beban sistem, dengan G_i 
 - **E7 kebijakan sadar-strategi** (`stackelberg.py`): p per sel (skor x level terlapor), dilatih pada pencuri injeksi split kalibrasi, dievaluasi pada pencuri uji yang memilih jenis serangan dan r. Di S1 kebijakan joint menurunkan NTL lolos di semua setting (hingga ±17% vs yang terbaik dari top-k/acak), terutama dengan mengurangi curian; sel level saja (tanpa ML) hampir sama baiknya. Kebijakan yang dipelajari menginspeksi pelapor "rendah tapi tidak minimal". MILP eksak tidak selesai bahkan pada 80 pencuri; pencarian lokal lebih baik dari incumbent MILP dan dalam ≤17% dari batas dual.
 - **S3 onset** (`configs/sens_onset.yaml`): fitur perubahan saja tidak cukup bila dilatih pada label SGCC; dengan adversarial training pada serangan onset, inversi level hilang, pencuri adaptif mengurangi kedalaman, top-k jauh lebih baik daripada acak, dan kebijakan sadar-strategi menambah perbaikan.
 - **Robustness**: CNN Wide & Deep (AUC lebih tinggi, inversi sama, gagal sama), batas r 0.5/0.7 (pencuri memilih batas), quantal response dan serangan transfer (top-k tetap tidak lebih baik daripada acak untuk A1/A3).
+- **Aturan interval** (`stackelberg.fit_interval`): 3 parameter (pita level, probabilitas) memulihkan 73-124% dari manfaat kebijakan sel-level penuh di S1; di S2 hanya menolong di satu setting dan lebih buruk daripada top-k di 3 dari 4.
 - **UCI** (`configs/uci.yaml`, tanpa label): A2/A4 terdeteksi bila detektor dilatih pada serangan itu; A1/A3 tak terlihat; bila pencuri bebas memilih serangan, tak ada kebijakan yang mengalahkan acak.
 - **Catatan lingkungan**: PyTorch hanya untuk CNN; `tip/__init__.py` menyetel `KMP_AFFINITY=disabled` (beberapa sandbox melarang afinitas thread).
 
@@ -184,10 +194,10 @@ Satu celah yang menentukan: satu-satunya data berlabel pencuri yang umum dipakai
 - [x] Laporkan fraksi `converged` dan sensitivitas terhadap `br_iters`
 - [x] Isi semua `\todo{}` hasil di `paper/main.tex` hanya dengan angka dari tabel hasil (via `numbers.tex`; tersisa penulis + URL)
 - [x] Ablasi missingness dilaporkan di badan paper
-- [ ] Verifikasi ulang semua entri `refs.bib` (halaman/volume) dan kuartil jurnal target. Entri baru (paruchuri2008, conitzer2006, tambe2011, mckelvey1995) sudah dicek ke CrossRef; DOI dataset UCI (trindade2015) belum terverifikasi
-- [ ] Batas halaman TSG: paper saat ini 10 halaman; cek aturan terbaru (halaman berbayar) sebelum mengirim
+- [ ] Verifikasi ulang entri `refs.bib` terhadap sumber asli. Sudah dicek: entri awal, DOI UCI (halaman repositori), `alfian2026` (halaman jurnal J-ICOM; tidak terindeks CrossRef), penulis Amin dkk. 2015 (Semantic Scholar). Belum: halaman akhir Border dan Sobel 1987 (CrossRef hanya memberi halaman awal); Amin dkk. 2015 dan Lin dkk. 2014 dikarakterisasi dari abstrak saja (teks penuh tidak tersedia), jadi baca sebelum mengirim; kuartil jurnal target
+- [x] Batas halaman TSG (IEEE PES): pengiriman pertama maksimal 10 halaman termasuk referensi, jika lebih dikembalikan tanpa review; biaya halaman berlebih berlaku di atas 12 halaman terbit ($250 per halaman untuk pengiriman 2024 ke atas). Paper 10 halaman (sisa ~0,3 halaman); tabel/gambar pendukung ada di `paper/supplement.tex`
+- [ ] Isi nama penulis dan afiliasi (blok `\todo`), tambahkan URL repositori dan lisensi; kedua blok menambah sekitar 0,1 halaman
 - [x] Hapus `paper/generated/*` hasil uji asap sebelum menjalankan `make run`
-- [ ] Tambahkan URL repositori dan lisensi
 
 ## 11. Sitasi data
 
