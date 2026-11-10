@@ -1,0 +1,32 @@
+# Ekstensi 5: replikasi di luar SGCC pada UCI ElectricityLoadDiagrams20112014 (tanpa label pencurian).
+# Data: python scripts/fetch_uci_eld.py  -> data/raw/uci/uci_daily.npz
+# Detektor dilatih HANYA pada serangan sintetis (A1/A2/A4) yang diinjeksikan ke konsumen latih.
+# Populasi kecil (<=370) -> 20 seed dan split 50/10/40 supaya jumlah pencuri uji memadai.
+name: uci_main
+seeds: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19]
+paths:
+  paper_generated: results/uci_main/paper_unused
+data:
+  source: matrix
+  matrix_path: data/raw/uci/uci_daily.npz
+  split: {train: 0.5, calib: 0.1, test: 0.4}
+variants:
+  - {name: gbm_syn,        use_level: true, use_missing: false, adv_train: true, game: true}
+  - {name: gbm_change_syn, use_level: true, use_missing: false, use_change: true, adv_train: true, game: true}
+adv_train:
+  ratio: 1.0
+  kinds: [A1, A2, A4-0, A4-90, A4-365]
+experiment:
+  adversaries: [A1, A2, A3, A4-0, A4-90, A4-365]
+  tau_grid: [0.0]
+  e4_variants: [gbm_syn]
+  a3_bank_max: 20000
+certificate: null
+deterrence: null
+bounded: null
+strategic:
+  variants: [gbm_syn, gbm_change_syn]
+  n_bins: [4, 4]
+  n_bins_1d: 6
+  validate: null
+  oracle_modes: []

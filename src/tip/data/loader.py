@@ -58,6 +58,12 @@ def load_dataset(cfg: dict, seed: int = 0):
     d = cfg["data"]
     if d["source"] == "sgcc":
         X_raw, y = read_sgcc_csv(d["sgcc_path"])
+    elif d["source"] == "matrix":   # npz berisi X (konsumen x hari), y opsional (tanpa y -> semua 0)
+        z = np.load(d["matrix_path"], allow_pickle=True)
+        X_raw = z["X"].astype(np.float32)
+        y = z["y"].astype(np.int8) if "y" in z.files else np.zeros(len(X_raw), dtype=np.int8)
+        keep = X_raw.mean(1) > 0
+        X_raw, y = X_raw[keep], y[keep]
     elif d["source"] == "synthetic":
         s = d["synthetic"]
         X_raw, y = make_synthetic(s["n_consumers"], s["n_days"], s["theft_rate"],

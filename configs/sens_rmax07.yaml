@@ -1,0 +1,11 @@
+# Sensitivitas batas kedalaman: r <= 0.7 (default 0.9). Lihat sens_rmax05.yaml.
+name: sgcc_rmax07
+paths:
+  paper_generated: results/sgcc_rmax07/paper_unused
+experiment:
+  r_grid: [0.0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7]
+  r_static: [0.3, 0.6]
+certificate: null
+deterrence: null
+strategic: null
+bounded: null

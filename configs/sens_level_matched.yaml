@@ -10,3 +10,6 @@ experiment:
   tau_grid: [0.0]
 certificate: null
 deterrence: null
+bounded: null
+strategic:
+  validate: null

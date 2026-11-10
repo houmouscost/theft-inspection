@@ -131,3 +131,51 @@ def test_thief_sampling_level_matched():
     assert (X[u].mean(1) > 0).all() and len(np.unique(u)) == 150
     m = _sample_thieves(te_h, 150, X, y, F, tr, {**ex, "thief_sampling": "level_matched"}, rng)
     assert np.median(F[m, LOGM]) > np.median(F[u, LOGM]) + 0.5
+
+
+def test_change_features_scale_invariant_and_onset_sensitive():
+    from tip.features import CHANGE_NAMES
+    X, _, _ = _data(T=360)
+    F1, F2 = compute_features(X), compute_features(2.5 * X)
+    k = [ALL_NAMES.index(c) for c in CHANGE_NAMES]
+    assert np.allclose(F1[:, k], F2[:, k], rtol=1e-3, atol=1e-3)
+    adv = Adversary("A4-0", X[:50], np.random.default_rng(0), onset=np.full(50, 180))
+    F3 = compute_features(adv.report(0.6))
+    drop = ALL_NAMES.index("chg_max_drop")
+    assert (F3[:, drop] > F1[:50, drop] + 0.3).mean() > 0.9     # langkah 60% terlihat sebagai penurunan
+
+
+def test_onset_adversary_ramp():
+    X = np.ones((3, 100), dtype=np.float32)
+    adv = Adversary("A4-20", X, np.random.default_rng(0), onset=np.array([10, 50, 90]))
+    Y = adv.report(0.5)
+    assert np.allclose(Y[:, :10], 1.0) and np.isclose(Y[0, 40], 0.5) and np.isclose(Y[1, 60], 0.75)
+    assert np.allclose(adv.stolen(0.0), 0.0) and adv.stolen(0.5)[0] > adv.stolen(0.5)[2]
+
+
+def test_local_policy_never_worse_than_uniform_and_meets_budget():
+    from tip import stackelberg as sb
+    rng = np.random.default_rng(0)
+    n, J, K = 60, 6, 9
+    Kth = rng.integers(0, K, size=(n, J)); Kth[:, 0] = rng.integers(0, K, size=n)
+    G = np.sort(rng.random((n, J)), axis=1); G[:, 0] = 0.0
+    Kh = rng.integers(0, K, size=600)
+    nh = np.bincount(Kh, minlength=K).astype(float)
+    for phi in (1.0, 3.0):
+        p, info = sb.fit_local(Kth, G, Kh, K, 0.05, phi, max_iter=10)
+        f, used = sb._objective(p, Kth, G, nh, 1 + phi)
+        f_u, _ = sb._objective(np.full(K, 0.05), Kth, G, nh, 1 + phi)
+        assert f <= f_u + 1e-9 and used <= 0.05 * (600 + n) * (1 + 1e-6)
+
+
+def test_quantal_limits():
+    from tip.game import solve_quantal
+    rng = np.random.default_rng(0)
+    n, R = 40, 5
+    hs = rng.random(400) * 0.5
+    S = np.tile(np.linspace(0.9, 0.0, R), (n, 1))
+    G = np.tile(np.linspace(0, 1, R), (n, 1))
+    q0 = solve_quantal(S, G, hs, 0.05, 0.0, 0.0, 1.0, lam=0.0, iters=3, rng=rng)
+    assert np.allclose(q0["pi"], 1.0 / R)
+    qh = solve_quantal(S, G, hs, 0.05, 0.0, 0.0, 1.0, lam=200.0, iters=5, rng=rng)
+    assert (qh["pi"][:, -1] > 0.9).all()           # hampir best-response: curi maksimum, skor terendah

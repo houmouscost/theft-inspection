@@ -70,3 +70,40 @@ def outcome_metrics(sol: dict, G: np.ndarray, total_load: float) -> dict:
         "precision": insp_th / max(insp_all, 1e-12),
         "converged": bool(sol["converged"]),
     }
+
+
+def solve_quantal(S: np.ndarray, G: np.ndarray, honest_scores: np.ndarray, b: float, eps: float,
+                  tau: float, phi: float, lam: float, iters: int = 8,
+                  rng: np.random.Generator | None = None):
+    """Pencuri quantal-response (logit): P(aksi j) ~ exp(lam * U_ij / max_j G_ij).
+
+    lam -> inf memberi best-response; lam = 0 memilih r seragam. Ambang kebijakan bergantung pada
+    laporan, jadi diiterasi: tiap putaran satu laporan diundi per pencuri dari pi, kebijakan di-fit ulang.
+    Metrik akhir = EKSPEKTASI atas pi terhadap kebijakan terakhir (tanpa derau undian).
+    """
+    rng = rng or np.random.default_rng(0)
+    n_th, R = S.shape
+    ar = np.arange(n_th)
+    gmax = G.max(1, keepdims=True) + 1e-12
+    idx = np.full(n_th, R // 2)
+    for _ in range(iters):
+        pol = fit_policy(np.concatenate([honest_scores, S[ar, idx]]), b, eps, tau)
+        P = pol.prob(S)
+        z = lam * G * (1.0 - P * (1.0 + phi)) / gmax
+        z -= z.max(1, keepdims=True)
+        pi = np.exp(z); pi /= pi.sum(1, keepdims=True)
+        cum = pi.cumsum(1)
+        idx = np.minimum((cum < rng.random((n_th, 1))).sum(1), R - 1)
+    ph = pol.prob(honest_scores)
+
+    def metrics(total_load: float) -> dict:
+        und = float((pi * G * (1 - P)).sum())
+        rec = float((pi * G * P).sum())
+        act = 1.0 - pi[:, 0]
+        insp = float((pi[:, 1:] * P[:, 1:]).sum())
+        return {"ntl_undetected": und / total_load, "ntl_recovered": rec / total_load,
+                "stolen_total": float((pi * G).sum()) / total_load, "deterred": float(1 - act.mean()),
+                "recall": insp / max(float(act.sum()), 1e-12),
+                "precision": insp / max(float((pi * P).sum() + ph.sum()), 1e-12), "converged": True}
+
+    return {"pi": pi, "P": P, "metrics": metrics}

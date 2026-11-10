@@ -32,3 +32,15 @@ deterrence:
 report:
   br_sensitivity: null
   level_matched: null
+
+strategic:
+  budgets: [0.05]
+  penalties: [3.0]
+  modes: [level]
+  oracle_modes: []
+  max_iter: 5
+  validate: null
+
+bounded:
+  budgets: [0.05]
+  lambdas: [3]

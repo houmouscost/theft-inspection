@@ -1,0 +1,12 @@
+# Sensitivitas batas kedalaman: r <= 0.5 (default 0.9). Pencuri adaptif memilih batas grid,
+# jadi angka NTL bergantung pada batas ini. Hanya E1-E4; dibaca laporan via report.depth_cap.
+name: sgcc_rmax05
+paths:
+  paper_generated: results/sgcc_rmax05/paper_unused
+experiment:
+  r_grid: [0.0, 0.1, 0.2, 0.3, 0.4, 0.5]
+  r_static: [0.3]
+certificate: null
+deterrence: null
+strategic: null
+bounded: null

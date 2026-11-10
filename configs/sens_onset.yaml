@@ -1,0 +1,25 @@
+# Ekstensi 2 (skenario S3): pencuri dengan ONSET eksogen. Pencuri mulai mencuri pada t0_i yang
+# diberikan (10-90% jendela) dan memilih panjang ramp L (jenis A4-L) serta kedalaman r.
+# Detektor dengan fitur perubahan dalam-deret (use_change) dapat melihat onset; pencuri menukar
+# curian (ramp lambat, r kecil) dengan risiko deteksi. A1/A3 tidak realistis di sini (tanpa periode jujur).
+name: sgcc_onset
+paths:
+  paper_generated: results/sgcc_onset/paper_unused
+variants:
+  - {name: gbm_level,      use_level: true, use_missing: false, adv_train: false, game: true}
+  - {name: gbm_change,     use_level: true, use_missing: false, use_change: true, adv_train: false, game: true}
+  - {name: gbm_change_adv, use_level: true, use_missing: false, use_change: true, adv_train: true,  game: true}
+adv_train:
+  kinds: [A4-0, A4-90, A4-365]
+experiment:
+  adversaries: [A4-0, A4-30, A4-90, A4-180, A4-365]
+  tau_grid: [0.0]
+  e4_variants: []
+certificate: null
+deterrence: null
+bounded: null
+strategic:
+  variants: [gbm_level, gbm_change, gbm_change_adv]
+  modes: [score, joint]
+  oracle_modes: []
+  validate: null

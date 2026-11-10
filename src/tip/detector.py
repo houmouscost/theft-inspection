@@ -14,9 +14,10 @@ def _logit(p):
 
 
 class Detector:
-    def __init__(self, name: str, use_level: bool, use_missing: bool, params: dict, seed: int = 0):
+    def __init__(self, name: str, use_level: bool, use_missing: bool, params: dict, seed: int = 0,
+                 use_change: bool = False):
         self.name = name
-        self.cols = columns(use_level, use_missing)
+        self.cols = columns(use_level, use_missing, use_change)
         self.params = params
         self.seed = seed
         self.clf = None
@@ -36,6 +37,12 @@ class Detector:
         else:  # degenerate: identitas
             self.platt = None
         return self
+
+    uses_series = False
+
+    def score_rows(self, F_rows: np.ndarray, X_rows=None) -> np.ndarray:
+        """Antarmuka seragam dengan detektor deret (deep.SeriesDetector): GBM memakai fitur."""
+        return self.score(F_rows)
 
     def score(self, F: np.ndarray) -> np.ndarray:
         raw = self.clf.predict_proba(F[:, self.cols])[:, 1]

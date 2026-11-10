@@ -1,0 +1,20 @@
+# Ekstensi 4: pembanding Wide & Deep CNN (Zheng dkk. 2018) pada deret mentah.
+# Pertanyaan: apakah inversi "level tinggi = mencurigakan" (dan kegagalan terhadap pencuri adaptif)
+# khas GBM berfitur, atau juga terjadi pada model deret-waktu standar SGCC?
+name: sgcc_cnn
+paths:
+  paper_generated: results/sgcc_cnn/paper_unused
+variants:
+  - {name: gbm_level, use_level: true, use_missing: false, adv_train: false, game: true}
+  - {name: cnn_wd, model: cnn, use_level: true, use_missing: false, adv_train: false, game: true}
+cnn:
+  epochs: 15
+  batch: 256
+  lr: 0.001
+experiment:
+  e4_variants: [gbm_level, cnn_wd]
+  tau_grid: [0.0]
+certificate: null
+deterrence: null
+strategic: null
+bounded: null
