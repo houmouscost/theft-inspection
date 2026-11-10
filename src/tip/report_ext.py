@@ -373,3 +373,39 @@ def stage_report_ext(cfg: dict, dirs: dict, M, save_tab, save_fig, LAB):
                     ss = s[(s.adversary == k) & np.isclose(s.r_static, max(ex["r_static"]))]
                     M.add(f"rUciStatRec{nm}", f"{100 * (ss.ntl_recovered / ss.stolen_total).mean():.1f}")
                     M.add(f"rUciMeanR{nm}", f"{a[(a.adversary == k) & (a.eps == 0)].mean_r.mean():.2f}")
+
+    # =================================================================== diagnostik data (seleksi label, kebersihan)
+    ds, dh, dz = _read(R / "d_selection.csv"), _read(R / "d_hygiene.csv"), _read(R / "d_zero_load.csv")
+    if len(ds):
+        dec = ds[ds.dimension == "consumption_decile"].sort_values("bin")
+        mb = ds[ds.dimension == "missing_bin"].sort_values("bin")
+        mlab = ["$<$1", "1--5", "5--10", "10--20", "20--40", "40--60", r"$\ge$60"]
+        lines = [r"\begin{tabular}{l" + "c" * 10 + "}", r"\toprule",
+                 "Consumption decile & " + " & ".join(str(int(b)) for b in dec.bin) + r" \\",
+                 r"Theft rate (\%) & " + " & ".join(f"{100 * r:.1f}" for r in dec.rate) + r" \\", r"\midrule",
+                 r"Missing readings (\%) & " + " & ".join(mlab[: len(mb)]) + " & " * (10 - len(mb)) + r" \\",
+                 r"Theft rate (\%) & " + " & ".join(f"{100 * r:.1f}" for r in mb.rate) + " & " * (10 - len(mb)) + r" \\",
+                 r"\bottomrule", r"\end{tabular}"]
+        save_tab("\n".join(lines), "tab_selection.tex", dirs)
+        M.add("rDecLo", f"{100 * dec.rate.iloc[0]:.1f}")
+        M.add("rDecHi", f"{100 * dec.rate.iloc[-1]:.1f}")
+        M.add("rDecMid", f"{100 * dec.rate.iloc[4]:.1f}")
+        M.add("rNSelPos", f"{int(dec.n.sum()):,}".replace(",", "{,}"))
+        M.add("rMissFirst", f"{100 * mb.rate.iloc[0]:.1f}")
+        M.add("rMissPeak", f"{100 * mb.rate.max():.1f}")
+        M.add("rMissPeakBin", mlab[int(mb.rate.values.argmax())])
+        M.add("rMissTop", f"{100 * mb.rate.iloc[-1]:.1f}")
+        M.add("rMissRho", f"{float(ds[ds.dimension == 'spearman_missing_label'].rate.iloc[0]):.2f}")
+    if len(dh):
+        h = dict(zip(dh["item"], dh["value"]))
+        cnt = lambda k: f"{int(h[k]):,}".replace(",", "{,}")
+        for nm, key in (("RawRows", "n_raw_rows"), ("AllMissing", "n_allmissing_rows"), ("AllMissingThieves", "n_allmissing_thieves"),
+                        ("AllZero", "n_allzero"), ("AllZeroThieves", "n_allzero_thieves"), ("DupRows", "n_rows_in_dup_groups"),
+                        ("DupGroups", "n_dup_groups"), ("DupGroupsPos", "n_dup_groups_positive"),
+                        ("DupConflict", "n_dup_groups_conflict")):
+            M.add(f"rD{nm}", cnt(key))
+    if len(dz):
+        g = dz.groupby("variant")
+        M.add("rAucNonzeroLevel", f"{g.auc_train_test_nonzero.mean()['gbm_level']:.3f}")
+        M.add("rRhoNonzeroLevel", f"{g.spearman_level_nonzero.mean()['gbm_level']:.2f}")
+        M.add("rAucNonzeroShape", f"{g.auc_train_test_nonzero.mean()['gbm_shape']:.3f}")

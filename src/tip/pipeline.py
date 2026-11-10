@@ -479,7 +479,7 @@ def stage_experiments(cfg: dict, dirs: dict):
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--config", default="configs/default.yaml")
-    ap.add_argument("--stage", default="all", choices=["data", "experiments", "report", "all"])
+    ap.add_argument("--stage", default="all", choices=["data", "experiments", "diag", "report", "all"])
     a = ap.parse_args()
     cfg = load_config(a.config)
     dirs = run_dirs(cfg)
@@ -490,6 +490,9 @@ def main():
         stage_data(cfg, dirs)
     if a.stage in ("experiments", "all"):
         stage_experiments(cfg, dirs)
+    if a.stage in ("diag", "all"):   # diagnostik data (seleksi label, kebersihan, berbeban nol); butuh data.npz
+        from . import diagnostics
+        diagnostics.run(cfg, dirs, *_load_artifacts(dirs))
     if a.stage in ("report", "all"):
         from .report import stage_report
         stage_report(cfg, dirs)

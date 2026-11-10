@@ -1,7 +1,7 @@
 PY ?= python
 export PYTHONPATH := src
 
-.PHONY: install test smoke data run main sens uci report paper all clean
+.PHONY: install test smoke data run main diag sens uci report paper all clean
 
 install:
 	$(PY) -m pip install -r requirements.txt
@@ -18,13 +18,17 @@ data:
 	bash scripts/download_sgcc.sh
 
 # Run penuh: data -> eksperimen utama (E1-E9) -> sensitivitas/ekstensi (br_iters, S2, batas r, CNN, onset S3, UCI) -> laporan
-run: main sens report
+run: main diag sens report
 
 main:
 	$(PY) -m tip.pipeline --config configs/default.yaml --stage data
 	$(PY) -m tip.pipeline --config configs/default.yaml --stage experiments
 
 # Sensitivitas yang dibaca laporan sgcc_main (report.br_sensitivity, report.level_matched)
+# Diagnostik data SGCC (seleksi label, kebersihan, robust thd konsumen berbeban nol)
+diag:
+	$(PY) -m tip.pipeline --config configs/default.yaml --stage diag
+
 sens:
 	$(PY) -m tip.pipeline --config configs/sens_br24.yaml --stage data
 	$(PY) -m tip.pipeline --config configs/sens_br24.yaml --stage experiments

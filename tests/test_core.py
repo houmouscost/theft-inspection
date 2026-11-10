@@ -179,3 +179,27 @@ def test_quantal_limits():
     assert np.allclose(q0["pi"], 1.0 / R)
     qh = solve_quantal(S, G, hs, 0.05, 0.0, 0.0, 1.0, lam=200.0, iters=5, rng=rng)
     assert (qh["pi"][:, -1] > 0.9).all()           # hampir best-response: curi maksimum, skor terendah
+
+
+def test_diagnostics_selection_and_hygiene(tmp_path):
+    """Desil konsumsi menghitung benar; tabel higiene mengenali baris nol, duplikat, label bertentangan, urutan berkas."""
+    import pandas as pd
+    from tip import diagnostics as D
+    rng = np.random.default_rng(0)
+    X = rng.gamma(2.0, 1.0, size=(1000, 30)).astype(np.float32) * np.linspace(0.2, 3, 1000)[:, None]
+    y = (rng.random(1000) < 0.1 + 0.2 * (np.arange(1000) > 900)).astype(np.int8)
+    miss = rng.random(1000).astype(np.float32)
+    t = D.selection_table(X, y, miss)
+    dec = t[t.dimension == "consumption_decile"]
+    assert len(dec) == 10 and dec.n.sum() == 1000 and dec.thieves.sum() == y.sum()
+    assert dec.rate.iloc[-1] > dec.rate.iloc[0]                       # laju naik menurut konsumsi pada data buatan
+    assert t[t.dimension == "missing_bin"].n.sum() == 1000
+    # berkas mentah mini: 2 baris nol identik (label bertentangan), 1 baris positif, 1 baris semua-NaN
+    cols = [f"2014/01/{d:02d}" for d in range(1, 6)]
+    df = pd.DataFrame([[0, 0, 0, 0, 0], [0, 0, 0, 0, 0], [1, 2, 3, 4, 5], [np.nan] * 5], columns=cols)
+    df.insert(0, "FLAG", [1, 0, 1, 1]); df.insert(0, "CONS_NO", ["a", "b", "c", "d"])
+    p = tmp_path / "mini.csv"; df.to_csv(p, index=False)
+    h = dict(zip(*D.hygiene_table(str(p)).values.T))
+    assert h["n_raw_rows"] == 4 and h["n_allmissing_rows"] == 1 and h["n_allmissing_thieves"] == 1
+    assert h["n_allzero"] == 2 and h["n_rows_in_dup_groups"] == 2 and h["n_dup_groups_conflict"] == 1
+    assert h["n_dup_groups_positive"] == 0 and bool(h["file_sorted_thieves_first"]) is False

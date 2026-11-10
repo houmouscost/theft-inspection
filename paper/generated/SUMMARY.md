@@ -2,7 +2,7 @@
 
 - seeds: [0, 1, 2, 3, 4]
 - data source: sgcc
-- tables: tab_budget.tex, tab_cert.tex, tab_conv.tex, tab_detector.tex, tab_main.tex, tab_onset.tex, tab_robust.tex, tab_s2.tex, tab_strategic.tex, tab_uci.tex, tab_variants.tex
+- tables: tab_budget.tex, tab_cert.tex, tab_conv.tex, tab_detector.tex, tab_main.tex, tab_onset.tex, tab_robust.tex, tab_s2.tex, tab_selection.tex, tab_strategic.tex, tab_uci.tex, tab_variants.tex
 - figures: fig_bounded.pdf, fig_deter.pdf, fig_eps.pdf, fig_mimicry.pdf, fig_policy.pdf, fig_tradeoff.pdf
 
 ## Numbers (macro -> value)
@@ -37,6 +37,8 @@
 - `\rAucAdv` = 0.699
 - `\rAucLevel` = 0.756
 - `\rAucMiss` = 0.782
+- `\rAucNonzeroLevel` = 0.754
+- `\rAucNonzeroShape` = 0.714
 - `\rAucSdAdv` = 0.013
 - `\rAucSdLevel` = 0.013
 - `\rAucSdMiss` = 0.011
@@ -141,6 +143,18 @@
 - `\rConvSens` = 100.0
 - `\rConvWorst` = 72.9
 - `\rConvWorstCell` = GBM + adv. training vs A2
+- `\rDAllMissing` = 5
+- `\rDAllMissingThieves` = 3
+- `\rDAllZero` = 2{,}109
+- `\rDAllZeroThieves` = 33
+- `\rDDupConflict` = 4
+- `\rDDupGroups` = 135
+- `\rDDupGroupsPos` = 2
+- `\rDDupRows` = 1{,}009
+- `\rDRawRows` = 42{,}372
+- `\rDecHi` = 22.2
+- `\rDecLo` = 3.1
+- `\rDecMid` = 8.2
 - `\rDeterAboveMin` = 100.0
 - `\rDeterAboveN` = 6
 - `\rDeterAdv` = A1
@@ -172,12 +186,18 @@
 - `\rMimicNTwo` = 90
 - `\rMimicViol` = 0
 - `\rMimicViolTwo` = 0
+- `\rMissFirst` = 7.0
 - `\rMissGain` = 0.026
+- `\rMissPeak` = 16.2
+- `\rMissPeakBin` = 40--60
+- `\rMissRho` = 0.07
+- `\rMissTop` = 10.4
 - `\rNConsumers` = 42{,}367
 - `\rNDays` = 1{,}034
 - `\rNLabelled` = 3{,}612
 - `\rNSOneThieves` = 659
 - `\rNSeeds` = 5
+- `\rNSelPos` = 40{,}258
 - `\rNTestHonest` = 7{,}751
 - `\rNanRate` = 25.6
 - `\rNtlOneHi` = 7.56
@@ -233,6 +253,7 @@
 - `\rRhoAdv` = -0.22
 - `\rRhoLevel` = 0.31
 - `\rRhoMiss` = 0.32
+- `\rRhoNonzeroLevel` = 0.31
 - `\rRhoShape` = 0.17
 - `\rRobustEscapeMin` = 99.9
 - `\rSTwoEpsGainMax` = -1.01
